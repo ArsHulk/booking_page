@@ -27,10 +27,12 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [activeDay, setActiveDay] = useState(() => Math.max(0, (new Date().getDay() || 7) - 1));
   const [slots, setSlots] = useState<AdminSlot[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const calendarScroll = useRef<HTMLDivElement | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const selected = slots.find((slot) => slot.id === selectedId) ?? null;
   const pendingCount = slots.filter((slot) => slot.status === "pending").length;
@@ -63,10 +65,35 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     void loadSlots();
   }, [loadSlots]);
 
+  useEffect(() => {
+    const scrollArea = calendarScroll.current;
+    if (!scrollArea) return;
+
+    const isCurrentWeek = dateKey(weekStart) === dateKey(startOfWeek());
+    const targetMinutes = isCurrentWeek
+      ? Math.max(timeRows[0], minutesInTeacherZone(Date.now()) - 90)
+      : timeRows[0];
+    const targetRow = Math.max(0, (targetMinutes - timeRows[0]) / 30);
+
+    const frame = window.requestAnimationFrame(() => {
+      scrollArea.scrollTop = targetRow * ROW_HEIGHT;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [weekStart]);
+
   function changeWeek(amount: number) {
     setWeekStart((current) => addDays(current, amount * 7));
     setActiveDay(0);
     setSelectedId(null);
+  }
+
+  function toggleEditing() {
+    setIsEditing((current) => {
+      const next = !current;
+      if (!next && selected?.status === "available") setSelectedId(null);
+      return next;
+    });
   }
 
   function slotAt(day: Date, minutes: number) {
@@ -171,11 +198,24 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       <section className="admin-content">
         <header className="admin-topbar">
           <div>
-            <p className="eyebrow">Weekly availability</p>
-            <h1>Your teaching week</h1>
-            <p>Click an empty half-hour line to offer a one-hour lesson.</p>
+            <p className="eyebrow">Weekly schedule</p>
+            <h1>Your schedule</h1>
+            <p>
+              {isEditing
+                ? "Choose a future half-hour start time to offer a one-hour lesson."
+                : "Your final teaching schedule for this week."}
+            </p>
           </div>
-          <a className="secondary-button export-button" href={exportHref}>↓ Download week</a>
+          <div className="admin-topbar-actions">
+            <button
+              className={isEditing ? "primary-button" : "secondary-button"}
+              onClick={toggleEditing}
+              type="button"
+            >
+              {isEditing ? "Done editing" : "Edit availability"}
+            </button>
+            <a className="secondary-button export-button" href={exportHref}>↓ Download week</a>
+          </div>
         </header>
 
         <div className="stat-row">
@@ -189,7 +229,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           <div className="week-toolbar admin-toolbar">
             <button className="icon-button" onClick={() => changeWeek(-1)} aria-label="Previous week">←</button>
             <div>
-              <span className="toolbar-kicker">Editing</span>
+              <span className="toolbar-kicker">{isEditing ? "Editing availability" : "Schedule"}</span>
               <strong>{formatWeek(weekStart)}</strong>
             </div>
             <button className="icon-button" onClick={() => changeWeek(1)} aria-label="Next week">→</button>
@@ -210,8 +250,15 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
 
           {notice ? <div className="admin-notice" role="status">{notice}</div> : null}
 
+          {isEditing ? (
+            <div className="edit-mode-notice" role="status">
+              <strong>Editing availability</strong>
+              <span>Select a future half-hour start time. Past times stay locked.</span>
+            </div>
+          ) : null}
+
           <div
-            className={`week-calendar admin-calendar ${loading ? "is-loading" : ""}`}
+            className={`week-calendar admin-calendar ${isEditing ? "is-editing" : "is-schedule"} ${loading ? "is-loading" : ""}`}
             onTouchStart={(event) => {
               const touch = event.touches[0];
               touchStart.current = { x: touch.clientX, y: touch.clientY };
@@ -228,7 +275,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
               ))}
             </div>
 
-            <div className="calendar-scroll">
+            <div className="calendar-scroll" ref={calendarScroll}>
               <div className="time-rail">
                 {timeRows.map((minutes) => (
                   <div key={minutes} style={{ height: ROW_HEIGHT }}>
@@ -252,12 +299,17 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                       const startsBeforeNow = timestampFor(day, minutes) < Date.now();
                       return (
                         <button
-                          className="availability-trigger"
-                          disabled={Boolean(occupied) || startsBeforeNow || busy}
+                          className={`availability-trigger ${startsBeforeNow ? "is-past" : ""}`}
+                          disabled={!isEditing || Boolean(occupied) || startsBeforeNow || busy}
                           key={minutes}
                           onClick={() => void toggleAvailability(day, minutes)}
                           style={{ top: row * ROW_HEIGHT, height: ROW_HEIGHT }}
-                          aria-label={`Add availability ${formatDay(day)} at ${rowLabel(minutes)}`}
+                          aria-label={
+                            startsBeforeNow
+                              ? `${formatDay(day)} at ${rowLabel(minutes)} is in the past`
+                              : `Add availability ${formatDay(day)} at ${rowLabel(minutes)}`
+                          }
+                          title={isEditing && !occupied && !startsBeforeNow ? "Add a one-hour lesson" : undefined}
                         />
                       );
                     })}
@@ -268,10 +320,17 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                       const label = slot.status === "available" ? "Available" : slot.studentName ?? "Student";
                       return (
                         <button
-                          className={`admin-slot ${slot.status} ${slot.id === selectedId ? "selected" : ""}`}
+                          className={`admin-slot ${slot.status} ${slot.id === selectedId ? "selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""}`}
                           key={slot.id}
-                          onClick={() => setSelectedId(slot.id)}
+                          onClick={() => {
+                            if (slot.status !== "available" || isEditing) setSelectedId(slot.id);
+                          }}
                           style={{ top: row * ROW_HEIGHT + 3, height: ROW_HEIGHT * 2 - 6 }}
+                          aria-label={
+                            slot.status === "available" && !isEditing
+                              ? `Available lesson at ${formatTime(slot.startAt)}`
+                              : `Open ${label} at ${formatTime(slot.startAt)}`
+                          }
                         >
                           <span>{formatTime(slot.startAt)}</span>
                           <strong>{label}</strong>
@@ -307,7 +366,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                   <button className="danger-button" onClick={() => void updateBooking("release")} disabled={busy}>Cancel lesson</button>
                 </>
               ) : null}
-              {selected.status === "available" ? (
+              {selected.status === "available" && isEditing ? (
                 <button className="danger-button" onClick={() => void toggleAvailabilityAt(selected.startAt)} disabled={busy}>Remove availability</button>
               ) : null}
             </div>
