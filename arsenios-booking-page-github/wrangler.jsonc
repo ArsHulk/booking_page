@@ -20,9 +20,6 @@
       "migrations_dir": "drizzle"
     }
   ],
-  "secrets": {
-    "required": ["ADMIN_PASSWORD"]
-  },
   "observability": {
     "enabled": true
   }
