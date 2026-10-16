@@ -16,7 +16,7 @@
     {
       "binding": "DB",
       "database_name": "arsenios-booking-db",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_id": "84fbff38-ff73-4f87-9394-4d402ea9022b",
       "migrations_dir": "drizzle"
     }
   ],
