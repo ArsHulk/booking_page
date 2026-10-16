@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+test("ships the public booking calendar and finished metadata", async () => {
+  const [calendar, layout, packageJson] = await Promise.all([
+    readFile(new URL("../app/BookingCalendar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(layout, /Arsenios' Booking Page/);
+  assert.match(calendar, /Arsenios&(?:apos|#39); Booking Page/);
+  assert.doesNotMatch(calendar, /Private drum lessons|Choose an available one-hour lesson|Athens time/);
+  assert.doesNotMatch(layout, /codex-preview|Starter Project/i);
+  assert.doesNotMatch(packageJson, /react-loading-skeleton/i);
+});
+
+test("keeps private names out of the public timetable code path", async () => {
+  const [publicRoute, adminRoute, bookingRoute] = await Promise.all([
+    readFile(new URL("../app/api/slots/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/slots/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/bookings/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(publicRoute, /studentName:\s*bookingSlots\.studentName/);
+  assert.match(adminRoute, /studentName/);
+  assert.match(bookingRoute, /eq\(bookingSlots\.status, "available"\)/);
+});
+
+test("uses website-native admin authentication and Cloudflare configuration", async () => {
+  const [adminPage, auth, wrangler, publicCalendar] = await Promise.all([
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../app/BookingCalendar.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(adminPage, /admin\/login/);
+  assert.match(auth, /HttpOnly/);
+  assert.match(auth, /SameSite=Strict/);
+  assert.match(auth, /ADMIN_PASSWORD/);
+  assert.match(wrangler, /"binding": "DB"/);
+  assert.match(publicCalendar, /href="\/admin\/login"/);
+  assert.doesNotMatch(adminPage, /ChatGPT/i);
+});
