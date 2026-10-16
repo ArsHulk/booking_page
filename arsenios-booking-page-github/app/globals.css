@@ -868,6 +868,13 @@ input:focus-visible {
   font-size: 14px;
 }
 
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
 .export-button {
   flex: 0 0 auto;
 }
@@ -926,6 +933,28 @@ input:focus-visible {
   background: #f7f7f5;
 }
 
+.edit-mode-notice {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  border-bottom: 1px solid #a8d9a7;
+  background: #edf8ed;
+  color: #224b27;
+  font-size: 12px;
+}
+
+.edit-mode-notice strong {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.edit-mode-notice span {
+  color: #4c6d4f;
+}
+
 .availability-trigger {
   position: absolute;
   z-index: 1;
@@ -937,8 +966,38 @@ input:focus-visible {
   cursor: crosshair;
 }
 
+.admin-calendar.is-schedule .availability-trigger {
+  pointer-events: none;
+}
+
+.admin-calendar.is-editing .availability-trigger:not(:disabled)::after {
+  content: "+";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(34, 75, 39, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  color: #224b27;
+  font-size: 16px;
+  font-weight: 700;
+  opacity: 0.45;
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
 .availability-trigger:hover:not(:disabled) {
   background: rgba(186, 240, 185, 0.45);
+}
+
+.admin-calendar.is-editing .availability-trigger:hover:not(:disabled)::after,
+.admin-calendar.is-editing .availability-trigger:focus-visible:not(:disabled)::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.06);
 }
 
 .availability-trigger:disabled {
@@ -964,6 +1023,15 @@ input:focus-visible {
 
 .admin-slot.selected {
   box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--ink);
+}
+
+.admin-slot.available.is-readonly {
+  cursor: default;
+}
+
+.admin-slot.available.is-readonly:hover {
+  filter: none;
+  transform: none;
 }
 
 .admin-slot small {
@@ -1237,6 +1305,16 @@ input:focus-visible {
 
   .admin-topbar {
     align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .admin-topbar-actions {
+    width: 100%;
+  }
+
+  .admin-topbar-actions > button {
+    flex: 1 1 auto;
   }
 
   .admin-topbar h1 {
@@ -1252,6 +1330,13 @@ input:focus-visible {
     overflow: hidden;
     padding: 0 12px;
     font-size: 0;
+  }
+
+  .edit-mode-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+    padding: 11px 14px;
   }
 
   .export-button::first-letter {
