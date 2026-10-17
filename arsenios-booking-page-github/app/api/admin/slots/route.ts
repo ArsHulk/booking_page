@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       endAt: slot.endAt.getTime(),
       status: slot.status,
       studentName: slot.studentName,
+      studentEmail: slot.studentEmail,
     }));
     return Response.json({ slots });
   } catch (error) {
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
         endAt: slot.endAt.getTime(),
         status: slot.status,
         studentName: null,
+        studentEmail: null,
       },
     });
   } catch (error) {

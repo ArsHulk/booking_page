@@ -5,9 +5,10 @@ import { errorResponse } from "../../../lib/server";
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as { slotId?: string; name?: string };
+    const payload = (await request.json()) as { slotId?: string; name?: string; email?: string };
     const slotId = payload.slotId?.trim() ?? "";
     const name = payload.name?.trim().replace(/\s+/g, " ") ?? "";
+    const email = payload.email?.trim().toLowerCase() ?? "";
 
     if (!slotId || name.length < 2 || name.length > 80) {
       return Response.json(
@@ -16,9 +17,24 @@ export async function POST(request: Request) {
       );
     }
 
+    if (
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      return Response.json(
+        { error: "Please enter a valid email address." },
+        { status: 400 },
+      );
+    }
+
     const [slot] = await getDb()
       .update(bookingSlots)
-      .set({ status: "pending", studentName: name, updatedAt: new Date() })
+      .set({
+        status: "pending",
+        studentName: name,
+        studentEmail: email,
+        updatedAt: new Date(),
+      })
       .where(
         and(eq(bookingSlots.id, slotId), eq(bookingSlots.status, "available")),
       )

@@ -12,6 +12,7 @@ export const bookingSlots = sqliteTable(
       .notNull()
       .default("available"),
     studentName: text("student_name"),
+    studentEmail: text("student_email"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),

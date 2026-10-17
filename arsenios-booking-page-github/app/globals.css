@@ -1050,6 +1050,12 @@ input:focus-visible {
   font-size: 12px;
 }
 
+.admin-notice.success {
+  border-bottom-color: #a8d9a7;
+  background: #edf8ed;
+  color: #224b27;
+}
+
 .booking-inspector {
   position: sticky;
   z-index: 10;
@@ -1078,6 +1084,15 @@ input:focus-visible {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.booking-inspector .student-email {
+  display: inline-block;
+  margin-top: 5px;
+  color: #4b4c48;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .status-pill {

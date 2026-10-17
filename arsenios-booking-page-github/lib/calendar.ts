@@ -13,6 +13,7 @@ export type PublicSlot = {
 export type AdminSlot = PublicSlot & {
   status: "available" | "pending" | "confirmed";
   studentName: string | null;
+  studentEmail: string | null;
 };
 
 export const timeRows = Array.from(

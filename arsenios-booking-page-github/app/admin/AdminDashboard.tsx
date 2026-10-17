@@ -31,6 +31,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"error" | "success">("error");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const calendarScroll = useRef<HTMLDivElement | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
@@ -55,6 +56,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       setSlots(data.slots);
       setSelectedId((current) => (data.slots?.some((slot) => slot.id === current) ? current : null));
     } catch (loadError) {
+      setNoticeTone("error");
       setNotice(loadError instanceof Error ? loadError.message : "Please try again.");
     } finally {
       setLoading(false);
@@ -119,6 +121,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       if (!response.ok) throw new Error(data.error ?? "Could not update availability.");
       await loadSlots();
     } catch (updateError) {
+      setNoticeTone("error");
       setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
     } finally {
       setBusy(false);
@@ -146,11 +149,25 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         window.location.assign("/admin/login");
         return;
       }
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        emailSent?: boolean;
+        emailWarning?: string;
+      };
       if (!response.ok) throw new Error(data.error ?? "Could not update the booking.");
       setSelectedId(null);
       await loadSlots();
+      setNoticeTone("success");
+      setNotice(
+        data.emailWarning ??
+          (action === "approve"
+            ? "Lesson confirmed and confirmation email sent."
+            : selected.status === "confirmed"
+              ? "Lesson cancelled and cancellation email sent."
+              : "Request rejected and email sent."),
+      );
     } catch (updateError) {
+      setNoticeTone("error");
       setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
     } finally {
       setBusy(false);
@@ -248,7 +265,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
             ))}
           </div>
 
-          {notice ? <div className="admin-notice" role="status">{notice}</div> : null}
+          {notice ? <div className={`admin-notice ${noticeTone}`} role="status">{notice}</div> : null}
 
           {isEditing ? (
             <div className="edit-mode-notice" role="status">
@@ -352,6 +369,9 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
               <span className={`status-pill ${selected.status}`}>{selected.status}</span>
               <h2>{selected.studentName ?? "Open lesson slot"}</h2>
               <p>{formatLongSlot(selected.startAt, selected.endAt)}</p>
+              {selected.studentEmail ? (
+                <a className="student-email" href={`mailto:${selected.studentEmail}`}>{selected.studentEmail}</a>
+              ) : null}
             </div>
             <div className="inspector-actions">
               {selected.status === "pending" ? (
