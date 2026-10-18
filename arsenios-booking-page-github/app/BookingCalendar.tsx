@@ -229,6 +229,12 @@ export function BookingCalendar() {
               <p>{error}</p>
               <button className="secondary-button" onClick={() => void loadSlots(true)}>Try again</button>
             </div>
+          ) : loading && !lastUpdated ? (
+            <div className="compact-empty-state">Loading availability…</div>
+          ) : slots.length === 0 ? (
+            <div className="compact-empty-state no-availability-state">
+              Arsenios has not added any availability for this week.
+            </div>
           ) : (
             viewMode === "calendar" ? (
               <div
@@ -308,9 +314,7 @@ export function BookingCalendar() {
               </div>
             ) : (
               <div id="availability-list" className={`availability-list ${loading ? "is-loading" : ""}`} role="tabpanel">
-                {loading && !lastUpdated ? (
-                  <div className="compact-empty-state">Loading availability…</div>
-                ) : listGroups.length ? (
+                {listGroups.length ? (
                   listGroups.map((group) => (
                     <section className={`availability-day-group ${dateKey(group.day) === todayKey ? "is-today" : ""}`} key={dateKey(group.day)}>
                       <div className="availability-day-label">

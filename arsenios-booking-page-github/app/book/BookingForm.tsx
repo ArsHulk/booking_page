@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { formatLongSlot, PublicSlot } from "../../lib/calendar";
+import {
+  formatLongDate,
+  formatTime,
+  formatWeekday,
+  PublicSlot,
+} from "../../lib/calendar";
 
 export function BookingForm({ slotId }: { slotId: string }) {
   const [slot, setSlot] = useState<PublicSlot | null>(null);
@@ -65,10 +70,13 @@ export function BookingForm({ slotId }: { slotId: string }) {
         {complete && slot ? (
           <div className="confirmation-state">
             <span className="confirmation-mark">✓</span>
-            <p className="eyebrow">Request received</p>
-            <h1>That time is being held for you.</h1>
-            <p>{formatLongSlot(slot.startAt, slot.endAt)}</p>
-            <p className="muted-copy">You will receive an email when Arsenios approves or rejects your request.</p>
+            <p className="eyebrow">Request sent</p>
+            <h1>Your lesson request has been sent.</h1>
+            <div className="confirmation-slot">
+              <strong>{formatLongDate(slot.startAt)}</strong>
+              <span>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</span>
+            </div>
+            <p className="muted-copy">This time is now held while Arsenios reviews your request. You will receive an email when it is accepted or rejected.</p>
             <Link className="primary-button" href="/">Return to timetable</Link>
           </div>
         ) : loading ? (
@@ -87,23 +95,24 @@ export function BookingForm({ slotId }: { slotId: string }) {
             <h1>Request this time</h1>
             <div className="selected-time">
               <span>Selected lesson</span>
-              <strong>{formatLongSlot(slot.startAt, slot.endAt)}</strong>
+              <strong>{formatLongDate(slot.startAt)}</strong>
+              <em>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</em>
             </div>
             <form onSubmit={submitRequest}>
-              <label htmlFor="student-name">Your name</label>
+              <label htmlFor="student-name">Your first name</label>
               <input
                 id="student-name"
                 name="name"
-                autoComplete="name"
+                autoComplete="given-name"
                 autoFocus
                 minLength={2}
                 maxLength={80}
-                placeholder="Enter your full name"
+                placeholder="For example, Maria"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 required
               />
-              <p className="form-help">Your name will only be visible to Arsenios.</p>
+              <p className="form-help">Your first name will only be visible to Arsenios.</p>
               <label htmlFor="student-email">Your email</label>
               <input
                 id="student-email"
@@ -119,7 +128,7 @@ export function BookingForm({ slotId }: { slotId: string }) {
               <p className="form-help">We will only use this to send the result of this booking request.</p>
               {error ? <p className="form-error" role="alert">{error}</p> : null}
               <button className="primary-button full-width" disabled={submitting}>
-                {submitting ? "Sending request…" : "Submit request"}
+                {submitting ? "Sending request…" : `Request ${formatWeekday(slot.startAt)} at ${formatTime(slot.startAt)}`}
               </button>
             </form>
           </>

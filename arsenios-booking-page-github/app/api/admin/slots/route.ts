@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { bookingSlots } from "../../../../db/schema";
 import {
@@ -23,12 +23,24 @@ export async function GET(request: Request) {
     await requireAdmin(request);
     const { from, to } = parseRange(new URL(request.url));
     const db = getDb();
-    const [rangeSlots, allPending] = await Promise.all([
+    const [rangeSlots, allPending, upcomingLessons] = await Promise.all([
       getSlotsInRange(from, to),
       db
         .select({ id: bookingSlots.id })
         .from(bookingSlots)
         .where(eq(bookingSlots.status, "pending")),
+      db
+        .select()
+        .from(bookingSlots)
+        .where(
+          and(
+            eq(bookingSlots.status, "confirmed"),
+            gt(bookingSlots.startAt, new Date()),
+            isNull(bookingSlots.completedAt),
+          ),
+        )
+        .orderBy(asc(bookingSlots.startAt))
+        .limit(1),
     ]);
     const slots = rangeSlots.map((slot) => ({
       id: slot.id,
@@ -40,7 +52,20 @@ export async function GET(request: Request) {
       completedAt: slot.completedAt?.getTime() ?? null,
       clearedAt: slot.clearedAt?.getTime() ?? null,
     }));
-    return Response.json({ slots, pendingCount: allPending.length });
+    const next = upcomingLessons[0];
+    const nextLesson = next
+      ? {
+          id: next.id,
+          startAt: next.startAt.getTime(),
+          endAt: next.endAt.getTime(),
+          status: next.status,
+          studentName: next.studentName,
+          studentEmail: next.studentEmail,
+          completedAt: next.completedAt?.getTime() ?? null,
+          clearedAt: next.clearedAt?.getTime() ?? null,
+        }
+      : null;
+    return Response.json({ slots, pendingCount: allPending.length, nextLesson });
   } catch (error) {
     return errorResponse(error);
   }

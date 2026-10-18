@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     if (!slotId || name.length < 2 || name.length > 80) {
       return Response.json(
-        { error: "Please enter your name before requesting this lesson." },
+        { error: "Please enter your first name before requesting this lesson." },
         { status: 400 },
       );
     }

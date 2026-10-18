@@ -19,22 +19,31 @@ import {
   weekDays,
   weekRange,
 } from "../../lib/calendar";
+import { AdminNotice, AdminNoticeState } from "./AdminNotice";
 
 const ROW_HEIGHT = 40;
 const REFRESH_INTERVAL = 45_000;
+
+type CompletionAction = "complete" | "uncomplete";
+type UndoCompletion = {
+  slotId: string;
+  action: CompletionAction;
+  successMessage: string;
+};
 
 export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [now, setNow] = useState(() => Date.now());
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
   const [activeDay, setActiveDay] = useState(() => Math.max(0, (new Date().getDay() || 7) - 1));
   const [slots, setSlots] = useState<AdminSlot[]>([]);
+  const [nextLesson, setNextLesson] = useState<AdminSlot | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [noticeTone, setNoticeTone] = useState<"error" | "success">("error");
+  const [notice, setNotice] = useState<AdminNoticeState>(null);
+  const [undoCompletion, setUndoCompletion] = useState<UndoCompletion | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const calendarScroll = useRef<HTMLDivElement | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
@@ -55,16 +64,23 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         window.location.assign("/admin/login");
         return;
       }
-      const data = (await response.json()) as { slots?: AdminSlot[]; pendingCount?: number; error?: string };
+      const data = (await response.json()) as { slots?: AdminSlot[]; nextLesson?: AdminSlot | null; pendingCount?: number; error?: string };
       if (!response.ok || !data.slots) throw new Error(data.error ?? "Could not load this week.");
       setSlots(data.slots);
+      setNextLesson(data.nextLesson ?? null);
       setPendingCount(data.pendingCount ?? 0);
       setSelectedId((current) => (data.slots?.some((slot) => slot.id === current) ? current : null));
-      if (showLoading) setNotice("");
+      if (showLoading) {
+        setNotice(null);
+        setUndoCompletion(null);
+      }
     } catch (loadError) {
       if (showLoading) {
-        setNoticeTone("error");
-        setNotice(loadError instanceof Error ? loadError.message : "Please try again.");
+        setUndoCompletion(null);
+        setNotice({
+          tone: "error",
+          message: loadError instanceof Error ? loadError.message : "Please try again.",
+        });
       }
     } finally {
       if (showLoading) setLoading(false);
@@ -74,6 +90,16 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   useEffect(() => {
     void loadSlots(true);
   }, [loadSlots]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const duration = notice.canUndo ? 5_000 : notice.tone === "error" ? 6_000 : 3_500;
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+      setUndoCompletion(null);
+    }, duration);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     const refresh = () => {
@@ -129,6 +155,20 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     });
   }
 
+  function dismissNotice() {
+    setNotice(null);
+    setUndoCompletion(null);
+  }
+
+  function showNotice(
+    message: string,
+    tone: "error" | "success" = "success",
+    undo: UndoCompletion | null = null,
+  ) {
+    setUndoCompletion(undo);
+    setNotice({ message, tone, canUndo: Boolean(undo) });
+  }
+
   function slotAt(day: Date, minutes: number) {
     const startAt = timestampFor(day, minutes);
     return slots.find((slot) => startAt < slot.endAt && startAt + 60 * 60 * 1000 > slot.startAt);
@@ -137,7 +177,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   async function toggleAvailabilityAt(startAt: number) {
     if (busy) return;
     setBusy(true);
-    setNotice("");
+    dismissNotice();
     try {
       const response = await fetch("/api/admin/slots", {
         method: "POST",
@@ -148,12 +188,12 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         window.location.assign("/admin/login");
         return;
       }
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { removed?: string; slot?: AdminSlot; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not update availability.");
       await loadSlots(false);
+      showNotice(data.removed ? "Availability removed." : "Availability added.");
     } catch (updateError) {
-      setNoticeTone("error");
-      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
       setBusy(false);
     }
@@ -172,7 +212,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     if (!confirmedCopy) return;
 
     setBusy(true);
-    setNotice("");
+    dismissNotice();
     try {
       const response = await fetch("/api/admin/slots", {
         method: "POST",
@@ -189,17 +229,15 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       const data = (await response.json()) as { copied?: number; skipped?: number; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not copy last week's availability.");
       await loadSlots(false);
-      setNoticeTone("success");
       if (!data.copied && !data.skipped) {
-        setNotice("There were no lesson times to copy from last week.");
+        showNotice("There were no lesson times to copy from last week.");
       } else {
-        setNotice(
+        showNotice(
           `${data.copied ?? 0} ${data.copied === 1 ? "slot" : "slots"} copied${data.skipped ? `; ${data.skipped} skipped because the time was past or already occupied` : ""}.`,
         );
       }
     } catch (updateError) {
-      setNoticeTone("error");
-      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
       setBusy(false);
     }
@@ -211,7 +249,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     if (action === "release" && !window.confirm(`Are you sure you want to ${label}?`)) return;
 
     setBusy(true);
-    setNotice("");
+    dismissNotice();
     try {
       const response = await fetch("/api/admin/bookings", {
         method: "PATCH",
@@ -226,51 +264,74 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       if (!response.ok) throw new Error(data.error ?? "Could not update the booking.");
       setSelectedId(null);
       await loadSlots(false);
-      setNoticeTone("success");
-      setNotice(
+      showNotice(
         data.emailWarning ??
           (action === "approve"
-            ? "Lesson confirmed and confirmation email sent."
+            ? "Request accepted. Confirmation email sent."
             : slot.status === "confirmed"
-              ? "Lesson cancelled and cancellation email sent."
+              ? "Lesson cancelled. Cancellation email sent."
               : "Request rejected and email sent."),
       );
     } catch (updateError) {
-      setNoticeTone("error");
-      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
       setBusy(false);
     }
   }
 
-  async function updateCompletion(slot: AdminSlot, action: "complete" | "uncomplete") {
+  async function requestCompletionChange(slotId: string, action: CompletionAction) {
+    const response = await fetch("/api/admin/completed", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slotId, action }),
+    });
+    if (response.status === 401) {
+      window.location.assign("/admin/login");
+      throw new Error("Your admin session has expired.");
+    }
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(data.error ?? "Could not update the lesson.");
+  }
+
+  async function updateCompletion(slot: AdminSlot, action: CompletionAction) {
     if (busy) return;
     if (action === "complete" && slot.startAt > Date.now()) {
       const proceed = window.confirm("This lesson has not started yet. Mark it as completed anyway?");
       if (!proceed) return;
     }
-    if (action === "uncomplete" && !window.confirm("Move this lesson back to scheduled?")) return;
 
     setBusy(true);
-    setNotice("");
+    dismissNotice();
     try {
-      const response = await fetch("/api/admin/completed", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: slot.id, action }),
-      });
-      if (response.status === 401) {
-        window.location.assign("/admin/login");
-        return;
-      }
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not update the lesson.");
+      await requestCompletionChange(slot.id, action);
       await loadSlots(false);
-      setNoticeTone("success");
-      setNotice(action === "complete" ? "Lesson added to Completed lessons." : "Lesson moved back to scheduled.");
+      showNotice(
+        action === "complete" ? "Lesson marked completed." : "Lesson returned to scheduled.",
+        "success",
+        {
+          slotId: slot.id,
+          action: action === "complete" ? "uncomplete" : "complete",
+          successMessage: action === "complete" ? "Lesson returned to scheduled." : "Lesson marked completed.",
+        },
+      );
     } catch (updateError) {
-      setNoticeTone("error");
-      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undoLastCompletion() {
+    if (!undoCompletion || busy) return;
+    const undo = undoCompletion;
+    setBusy(true);
+    dismissNotice();
+    try {
+      await requestCompletionChange(undo.slotId, undo.action);
+      await loadSlots(false);
+      showNotice(undo.successMessage);
+    } catch (updateError) {
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
       setBusy(false);
     }
@@ -349,7 +410,21 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           <p>Each new week starts blank.</p>
         </div>
 
-        {notice ? <div className={`admin-notice standalone-notice ${noticeTone}`} role="status">{notice}</div> : null}
+        <AdminNotice
+          notice={notice}
+          onUndo={undoCompletion ? () => void undoLastCompletion() : undefined}
+          onDismiss={dismissNotice}
+        />
+
+        {!isEditing ? (
+          <article className={`next-lesson-card ${nextLesson ? "has-lesson" : "is-empty"}`}>
+            <div>
+              <span>Next lesson</span>
+              <strong>{nextLesson?.studentName ?? "No upcoming lessons"}</strong>
+            </div>
+            {nextLesson ? <p>{formatLongSlot(nextLesson.startAt, nextLesson.endAt)}</p> : <p>Your next confirmed lesson will appear here.</p>}
+          </article>
+        ) : null}
 
         <section className={`admin-overview-grid ${isEditing ? "admin-overview-editing" : ""}`} aria-label="Weekly lesson overview">
           <article className="admin-overview-card pending-overview">

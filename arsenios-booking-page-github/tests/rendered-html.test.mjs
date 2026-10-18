@@ -44,6 +44,7 @@ test("adds live calendar context without exposing booking details", async () => 
   assert.match(calendar, /visibilitychange/);
   assert.match(calendar, /availability-list/);
   assert.match(calendar, /Updated just now/);
+  assert.match(calendar, /Arsenios has not added any availability for this week/);
   assert.match(calendar, /useState<"calendar" \| "list">\("list"\)/);
   assert.match(calendar, /arsenios-booking-view-v2/);
   assert.match(styles, /current-time-line/);
@@ -63,6 +64,10 @@ test("collects private booking email and sends the requested notifications", asy
   ]);
 
   assert.match(form, /type="email"/);
+  assert.match(form, /Your first name/);
+  assert.match(form, /autoComplete="given-name"/);
+  assert.match(form, /Request \$\{formatWeekday\(slot\.startAt\)\} at/);
+  assert.match(form, /This time is now held while Arsenios reviews your request/);
   assert.match(bookingRoute, /studentEmail: email/);
   assert.match(adminBookingRoute, /sendBookingEmail/);
   assert.match(emailService, /Your drum lesson is confirmed/);
@@ -87,6 +92,10 @@ test("uses website-native admin authentication and Cloudflare configuration", as
   assert.match(adminDashboard, /Reject/);
   assert.match(adminDashboard, /calendarScroll/);
   assert.match(adminDashboard, /Copy last week/);
+  assert.match(adminDashboard, /Next lesson/);
+  assert.match(adminDashboard, /Availability added/);
+  assert.match(adminDashboard, /Request accepted\. Confirmation email sent/);
+  assert.match(adminDashboard, /5_000/);
   assert.match(adminDashboard, /nav-badge/);
   assert.match(adminDashboard, /admin-overview-editing/);
   assert.match(adminDashboard, /admin-calendar-readonly/);
@@ -112,14 +121,17 @@ test("copies lesson times without copying student bookings", async () => {
   assert.match(styles, /\.copy-week-button:not\(\.is-editing\)\s*\{\s*display:\s*none;/s);
   assert.match(slotsRoute, /teacherCalendarDate/);
   assert.match(slotsRoute, /pendingCount/);
+  assert.match(slotsRoute, /nextLesson/);
+  assert.match(slotsRoute, /orderBy\(asc\(bookingSlots\.startAt\)\)/);
   assert.match(slotsRoute, /status: "available"/);
 });
 
 test("tracks completed lessons without deleting cleared history", async () => {
-  const [dashboard, completedPage, completedRoute, schema, migration] = await Promise.all([
+  const [dashboard, completedPage, completedRoute, notice, schema, migration] = await Promise.all([
     readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/completed/CompletedLessons.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/completed/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/AdminNotice.tsx", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../completion-migration.sql", import.meta.url), "utf8"),
   ]);
@@ -129,6 +141,10 @@ test("tracks completed lessons without deleting cleared history", async () => {
   assert.match(dashboard, /Mark completed/);
   assert.match(completedPage, /Show cleared history/);
   assert.match(completedPage, /Clear from list/);
+  assert.match(completedPage, /undoLastAction/);
+  assert.match(completedPage, /5_000/);
+  assert.match(dashboard, /undoLastCompletion/);
+  assert.match(notice, />Undo</);
   assert.match(completedRoute, /clearedAt: now/);
   assert.doesNotMatch(completedRoute, /delete\(bookingSlots\)/);
   assert.match(schema, /completedAt/);

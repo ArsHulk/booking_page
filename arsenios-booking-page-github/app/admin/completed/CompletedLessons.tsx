@@ -13,6 +13,7 @@ import {
   startOfWeek,
   weekRange,
 } from "../../../lib/calendar";
+import { AdminNotice, AdminNoticeState } from "../AdminNotice";
 
 type CompletedLesson = {
   id: string;
@@ -22,6 +23,13 @@ type CompletedLesson = {
   studentEmail: string | null;
   completedAt: number;
   clearedAt: number | null;
+};
+
+type CompletedListAction = "clear" | "restore";
+type UndoCompletedListAction = {
+  slotId: string;
+  action: CompletedListAction;
+  successMessage: string;
 };
 
 function shiftMonth(date: Date, amount: number) {
@@ -37,8 +45,8 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
   const [showCleared, setShowCleared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
-  const [noticeTone, setNoticeTone] = useState<"error" | "success">("error");
+  const [notice, setNotice] = useState<AdminNoticeState>(null);
+  const [undoAction, setUndoAction] = useState<UndoCompletedListAction | null>(null);
   const currentMonth = useMemo(() => startOfMonth(), []);
 
   const loadLessons = useCallback(async (showLoading = false) => {
@@ -60,11 +68,17 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
       if (!pendingResponse.ok) throw new Error(pendingData.error ?? "Could not load pending requests.");
       setLessons(data.lessons);
       setPendingCount(pendingData.pendingCount ?? 0);
-      if (showLoading) setNotice("");
+      if (showLoading) {
+        setNotice(null);
+        setUndoAction(null);
+      }
     } catch (loadError) {
       if (showLoading) {
-        setNoticeTone("error");
-        setNotice(loadError instanceof Error ? loadError.message : "Please try again.");
+        setUndoAction(null);
+        setNotice({
+          tone: "error",
+          message: loadError instanceof Error ? loadError.message : "Please try again.",
+        });
       }
     } finally {
       if (showLoading) setLoading(false);
@@ -74,6 +88,16 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
   useEffect(() => {
     void loadLessons(true);
   }, [loadLessons]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const duration = notice.canUndo ? 5_000 : notice.tone === "error" ? 6_000 : 3_500;
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+      setUndoAction(null);
+    }, duration);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     const refresh = () => void loadLessons(false);
@@ -90,28 +114,67 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
     };
   }, [loadLessons]);
 
-  async function updateLesson(lesson: CompletedLesson, action: "clear" | "restore") {
-    if (action === "clear" && !window.confirm("Clear this lesson from the active list? It will remain in your history.")) return;
-    setBusyId(lesson.id);
-    setNotice("");
-    try {
-      const response = await fetch("/api/admin/completed", {
+  function dismissNotice() {
+    setNotice(null);
+    setUndoAction(null);
+  }
+
+  function showNotice(
+    message: string,
+    tone: "error" | "success" = "success",
+    undo: UndoCompletedListAction | null = null,
+  ) {
+    setUndoAction(undo);
+    setNotice({ message, tone, canUndo: Boolean(undo) });
+  }
+
+  async function requestListChange(slotId: string, action: CompletedListAction) {
+    const response = await fetch("/api/admin/completed", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: lesson.id, action }),
-      });
-      if (response.status === 401) {
-        window.location.assign("/admin/login");
-        return;
-      }
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not update the lesson.");
+        body: JSON.stringify({ slotId, action }),
+    });
+    if (response.status === 401) {
+      window.location.assign("/admin/login");
+      throw new Error("Your admin session has expired.");
+    }
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(data.error ?? "Could not update the lesson.");
+  }
+
+  async function updateLesson(lesson: CompletedLesson, action: CompletedListAction) {
+    setBusyId(lesson.id);
+    dismissNotice();
+    try {
+      await requestListChange(lesson.id, action);
       await loadLessons(false);
-      setNoticeTone("success");
-      setNotice(action === "clear" ? "Lesson cleared from the active list and kept in history." : "Lesson restored to the active list.");
+      showNotice(
+        action === "clear" ? "Lesson cleared from the completed list." : "Lesson restored to the active completed list.",
+        "success",
+        {
+          slotId: lesson.id,
+          action: action === "clear" ? "restore" : "clear",
+          successMessage: action === "clear" ? "Lesson restored to the active completed list." : "Lesson returned to cleared history.",
+        },
+      );
     } catch (updateError) {
-      setNoticeTone("error");
-      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function undoLastAction() {
+    if (!undoAction || busyId) return;
+    const undo = undoAction;
+    setBusyId(undo.slotId);
+    dismissNotice();
+    try {
+      await requestListChange(undo.slotId, undo.action);
+      await loadLessons(false);
+      showNotice(undo.successMessage);
+    } catch (updateError) {
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
       setBusyId(null);
     }
@@ -166,7 +229,11 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
           <p>{formatMonth(monthStart)}</p>
         </div>
 
-        {notice ? <div className={`admin-notice standalone-notice ${noticeTone}`} role="status">{notice}</div> : null}
+        <AdminNotice
+          notice={notice}
+          onUndo={undoAction ? () => void undoLastAction() : undefined}
+          onDismiss={dismissNotice}
+        />
 
         <section className="completed-card">
           <div className="month-toolbar">

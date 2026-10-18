@@ -153,15 +153,25 @@ export function formatDay(date: Date, includeDate = true) {
   }).format(date);
 }
 
-export function formatLongSlot(startAt: number, endAt: number) {
-  const date = new Intl.DateTimeFormat("en-GB", {
+export function formatWeekday(value: number | Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TEACHER_TIME_ZONE,
+    weekday: "long",
+  }).format(typeof value === "number" ? new Date(value) : value);
+}
+
+export function formatLongDate(value: number | Date) {
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: TEACHER_TIME_ZONE,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(startAt));
-  return `${date}, ${formatTime(startAt)}–${formatTime(endAt)}`;
+  }).format(typeof value === "number" ? new Date(value) : value);
+}
+
+export function formatLongSlot(startAt: number, endAt: number) {
+  return `${formatLongDate(startAt)}, ${formatTime(startAt)}–${formatTime(endAt)}`;
 }
 
 export function formatWeek(weekStart: Date) {
