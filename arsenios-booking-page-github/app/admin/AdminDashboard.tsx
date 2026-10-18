@@ -333,7 +333,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
             {isEditing ? <p className="admin-description">Choose a future half-hour start time to offer a one-hour lesson.</p> : null}
           </div>
           <div className="admin-topbar-actions">
-            <button className="secondary-button copy-week-button" onClick={() => void copyPreviousWeek()} disabled={busy} type="button">Copy last week</button>
+            <button className={`secondary-button copy-week-button ${isEditing ? "is-editing" : ""}`} onClick={() => void copyPreviousWeek()} disabled={busy} type="button">Copy last week</button>
             <button className={isEditing ? "primary-button" : "secondary-button"} onClick={toggleEditing} type="button">
               {isEditing ? "Done editing" : "Edit availability"}
             </button>

@@ -100,13 +100,16 @@ test("uses website-native admin authentication and Cloudflare configuration", as
 });
 
 test("copies lesson times without copying student bookings", async () => {
-  const [dashboard, slotsRoute] = await Promise.all([
+  const [dashboard, slotsRoute, styles] = await Promise.all([
     readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/slots/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(dashboard, /copy_previous_week/);
   assert.match(dashboard, /Student names and bookings will not be copied/);
+  assert.match(dashboard, /copy-week-button.*isEditing.*is-editing/s);
+  assert.match(styles, /\.copy-week-button:not\(\.is-editing\)\s*\{\s*display:\s*none;/s);
   assert.match(slotsRoute, /teacherCalendarDate/);
   assert.match(slotsRoute, /pendingCount/);
   assert.match(slotsRoute, /status: "available"/);

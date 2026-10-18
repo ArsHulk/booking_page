@@ -2682,6 +2682,10 @@ input:focus-visible {
     display: none;
   }
 
+  .copy-week-button:not(.is-editing) {
+    display: none;
+  }
+
   .confirmed-overview {
     order: -1;
   }
