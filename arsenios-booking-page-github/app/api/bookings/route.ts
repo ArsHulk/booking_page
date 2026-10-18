@@ -33,6 +33,8 @@ export async function POST(request: Request) {
         status: "pending",
         studentName: name,
         studentEmail: email,
+        completedAt: null,
+        clearedAt: null,
         updatedAt: new Date(),
       })
       .where(

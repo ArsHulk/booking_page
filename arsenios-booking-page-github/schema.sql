@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS booking_slots (
   status TEXT DEFAULT 'available' NOT NULL,
   student_name TEXT,
   student_email TEXT,
+  completed_at INTEGER,
+  cleared_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

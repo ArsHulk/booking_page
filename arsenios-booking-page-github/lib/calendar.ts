@@ -4,16 +4,22 @@ export const DAY_END_MINUTES = 23 * 60;
 export const STEP_MINUTES = 30;
 export const LESSON_MINUTES = 60;
 
-export type PublicSlot = {
+type CalendarSlot = {
   id: string;
   startAt: number;
   endAt: number;
 };
 
-export type AdminSlot = PublicSlot & {
+export type PublicSlot = CalendarSlot & {
+  status: "available" | "taken";
+};
+
+export type AdminSlot = CalendarSlot & {
   status: "available" | "pending" | "confirmed";
   studentName: string | null;
   studentEmail: string | null;
+  completedAt: number | null;
+  clearedAt: number | null;
 };
 
 export const timeRows = Array.from(
@@ -26,6 +32,13 @@ export function startOfWeek(date = new Date()) {
   result.setHours(12, 0, 0, 0);
   const day = result.getDay() || 7;
   result.setDate(result.getDate() - day + 1);
+  return result;
+}
+
+export function startOfMonth(date = new Date()) {
+  const result = new Date(date);
+  result.setHours(12, 0, 0, 0);
+  result.setDate(1);
   return result;
 }
 
@@ -100,6 +113,15 @@ export function weekRange(weekStart: Date) {
   };
 }
 
+export function monthRange(monthStart: Date) {
+  const nextMonth = new Date(monthStart);
+  nextMonth.setMonth(nextMonth.getMonth() + 1, 1);
+  return {
+    from: timestampFor(monthStart, 0),
+    to: timestampFor(nextMonth, 0),
+  };
+}
+
 export function minutesInTeacherZone(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: TEACHER_TIME_ZONE,
@@ -149,6 +171,13 @@ export function formatWeek(weekStart: Date) {
     year: "numeric",
   }).format(end);
   return `${startText} – ${endText}`;
+}
+
+export function formatMonth(monthStart: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(monthStart);
 }
 
 export function rowLabel(minutes: number) {

@@ -69,7 +69,12 @@ export async function PATCH(request: Request) {
     if (payload.action === "approve") {
       const [updated] = await db
         .update(bookingSlots)
-        .set({ status: "confirmed", updatedAt: new Date() })
+        .set({
+          status: "confirmed",
+          completedAt: null,
+          clearedAt: null,
+          updatedAt: new Date(),
+        })
         .where(
           and(eq(bookingSlots.id, slotId), eq(bookingSlots.status, expectedStatus)),
         )
@@ -84,6 +89,8 @@ export async function PATCH(request: Request) {
           status: "available",
           studentName: null,
           studentEmail: null,
+          completedAt: null,
+          clearedAt: null,
           updatedAt: new Date(),
         })
         .where(

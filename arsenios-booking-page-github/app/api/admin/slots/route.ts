@@ -21,6 +21,8 @@ export async function GET(request: Request) {
       status: slot.status,
       studentName: slot.studentName,
       studentEmail: slot.studentEmail,
+      completedAt: slot.completedAt?.getTime() ?? null,
+      clearedAt: slot.clearedAt?.getTime() ?? null,
     }));
     return Response.json({ slots });
   } catch (error) {
@@ -89,6 +91,8 @@ export async function POST(request: Request) {
         status: slot.status,
         studentName: null,
         studentEmail: null,
+        completedAt: null,
+        clearedAt: null,
       },
     });
   } catch (error) {

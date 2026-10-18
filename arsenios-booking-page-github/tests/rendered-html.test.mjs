@@ -24,23 +24,89 @@ test("keeps private names out of the public timetable code path", async () => {
   ]);
 
   assert.doesNotMatch(publicRoute, /studentName:\s*bookingSlots\.studentName/);
+  assert.doesNotMatch(publicRoute, /studentEmail:\s*bookingSlots\.studentEmail/);
+  assert.match(publicRoute, /slot\.status === "available" \? "available" : "taken"/);
   assert.match(adminRoute, /studentName/);
   assert.match(bookingRoute, /eq\(bookingSlots\.status, "available"\)/);
 });
 
+test("adds live calendar context without exposing booking details", async () => {
+  const [calendar, styles, manifest, serviceWorker] = await Promise.all([
+    readFile(new URL("../app/BookingCalendar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(calendar, /Taken/);
+  assert.match(calendar, /available this week/);
+  assert.match(calendar, /returnToToday/);
+  assert.match(calendar, /visibilitychange/);
+  assert.match(styles, /current-time-line/);
+  assert.match(styles, /feTurbulence/);
+  assert.match(manifest, /"display": "standalone"/);
+  assert.match(serviceWorker, /serviceWorker|fetch/);
+});
+
+test("collects private booking email and sends the requested notifications", async () => {
+  const [form, bookingRoute, adminBookingRoute, emailService, schema] = await Promise.all([
+    readFile(new URL("../app/book/BookingForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/bookings/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/bookings/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/booking-email.ts", import.meta.url), "utf8"),
+    readFile(new URL("../schema.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(form, /type="email"/);
+  assert.match(bookingRoute, /studentEmail: email/);
+  assert.match(adminBookingRoute, /sendBookingEmail/);
+  assert.match(emailService, /Your drum lesson is confirmed/);
+  assert.match(emailService, /has been rejected/);
+  assert.match(emailService, /\+30 694 263 1232/);
+  assert.match(emailService, /api\.brevo\.com\/v3\/smtp\/email/);
+  assert.match(schema, /student_email TEXT/);
+});
+
 test("uses website-native admin authentication and Cloudflare configuration", async () => {
-  const [adminPage, auth, wrangler, publicCalendar] = await Promise.all([
+  const [adminPage, adminDashboard, auth, wrangler, publicCalendar] = await Promise.all([
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../app/BookingCalendar.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(adminPage, /admin\/login/);
+  assert.match(adminDashboard, /Edit availability/);
+  assert.match(adminDashboard, /Approve request/);
+  assert.match(adminDashboard, /Reject/);
+  assert.match(adminDashboard, /calendarScroll/);
   assert.match(auth, /HttpOnly/);
   assert.match(auth, /SameSite=Strict/);
   assert.match(auth, /ADMIN_PASSWORD/);
   assert.match(wrangler, /"binding": "DB"/);
   assert.match(publicCalendar, /href="\/admin\/login"/);
   assert.doesNotMatch(adminPage, /ChatGPT/i);
+});
+
+test("tracks completed lessons without deleting cleared history", async () => {
+  const [dashboard, completedPage, completedRoute, schema, migration] = await Promise.all([
+    readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/completed/CompletedLessons.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/completed/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../completion-migration.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /Pending requests/);
+  assert.match(dashboard, /Confirmed this week/);
+  assert.match(dashboard, /Mark completed/);
+  assert.match(completedPage, /Show cleared history/);
+  assert.match(completedPage, /Clear from list/);
+  assert.match(completedRoute, /clearedAt: now/);
+  assert.doesNotMatch(completedRoute, /delete\(bookingSlots\)/);
+  assert.match(schema, /completedAt/);
+  assert.match(schema, /clearedAt/);
+  assert.match(migration, /ADD COLUMN completed_at/);
+  assert.match(migration, /ADD COLUMN cleared_at/);
 });
