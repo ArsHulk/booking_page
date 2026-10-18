@@ -268,6 +268,54 @@ input:focus-visible {
   display: none;
 }
 
+.availability-viewbar {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 21px;
+  border-bottom: 1px solid var(--line);
+  background: #f8f8f6;
+}
+
+.public-page .availability-viewbar {
+  border-color: #2c2d2a;
+  background: #111210;
+}
+
+.view-toggle {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #383936;
+  border-radius: 9px;
+  background: #0c0d0c;
+}
+
+.view-toggle button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 12px;
+  background: transparent;
+  color: #8f908b;
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.view-toggle button.active {
+  background: #fff;
+  color: var(--ink);
+}
+
+.refresh-status {
+  color: #777873;
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .return-today-button {
   min-height: 34px;
   flex: 0 0 auto;
@@ -315,13 +363,110 @@ input:focus-visible {
   cursor: not-allowed;
 }
 
-.week-calendar {
+.week-calendar,
+.availability-list {
   position: relative;
   transition: opacity 150ms ease;
 }
 
-.week-calendar.is-loading {
+.week-calendar.is-loading,
+.availability-list.is-loading {
   opacity: 0.58;
+}
+
+.availability-list {
+  min-height: 330px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding: 10px 18px 18px;
+  background: #111210;
+  scrollbar-color: #555650 transparent;
+}
+
+.availability-day-group {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px 4px;
+  border-bottom: 1px solid #2c2d2a;
+}
+
+.availability-day-group:last-child {
+  border-bottom: 0;
+}
+
+.availability-day-group.is-today {
+  border-radius: 9px;
+  background: rgba(207, 228, 203, 0.045);
+  box-shadow: inset 3px 0 0 #8ca98a;
+}
+
+.availability-day-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  color: #8f908b;
+}
+
+.availability-day-label strong {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.availability-day-label span {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 760;
+}
+
+.availability-time-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 7px;
+}
+
+.availability-list-slot {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(23, 59, 28, 0.18);
+  border-radius: 8px;
+  padding: 0 11px;
+  background: var(--green);
+  color: var(--green-deep);
+  transition: filter 130ms ease, transform 130ms ease;
+}
+
+.availability-list-slot:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.availability-list-slot strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.availability-list-slot span {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compact-empty-state {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  padding: 30px;
+  color: #8f908b;
+  font-size: 12px;
+  text-align: center;
 }
 
 .calendar-header-row,
@@ -703,6 +848,7 @@ input:focus-visible {
 }
 
 .primary-button:disabled,
+.secondary-button:disabled,
 .danger-button:disabled {
   opacity: 0.52;
   cursor: wait;
@@ -945,6 +1091,7 @@ input:focus-visible {
 
 .admin-sidebar nav a,
 .admin-sidebar nav button {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -964,10 +1111,30 @@ input:focus-visible {
   color: #fff;
 }
 
-.admin-sidebar nav span {
+.admin-sidebar nav .nav-icon {
   width: 20px;
+  flex: 0 0 20px;
   color: #d7d8d3;
   text-align: center;
+}
+
+.admin-sidebar nav .nav-label {
+  min-width: 0;
+}
+
+.admin-sidebar nav .nav-badge {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #c7443d;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
 }
 
 .admin-sidebar nav button {
@@ -1062,7 +1229,7 @@ input:focus-visible {
   font-size: clamp(36px, 4.5vw, 58px);
 }
 
-.admin-topbar > div > p:last-child {
+.admin-topbar .admin-description {
   margin: 13px 0 0;
   color: var(--muted);
   font-size: 14px;
@@ -1904,6 +2071,38 @@ input:focus-visible {
     border-radius: 13px;
   }
 
+  .availability-viewbar {
+    min-height: 47px;
+    padding: 7px 10px;
+  }
+
+  .view-toggle button {
+    min-height: 29px;
+    padding: 0 10px;
+  }
+
+  .availability-list {
+    min-height: 300px;
+    max-height: 560px;
+    padding: 7px 10px 13px;
+  }
+
+  .availability-day-group {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 2px;
+  }
+
+  .availability-time-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .availability-list-slot {
+    min-height: 42px;
+    padding: 0 9px;
+  }
+
   .mobile-day-tabs {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -2004,24 +2203,42 @@ input:focus-visible {
 
   .admin-sidebar {
     justify-content: space-between;
+    padding: 12px 14px;
   }
 
-  .admin-sidebar nav a span,
-  .admin-sidebar nav a:first-child,
+  .admin-wordmark > span:last-child,
+  .admin-sidebar nav .nav-label,
   .admin-profile {
     display: none;
   }
 
-  .admin-sidebar nav a {
-    padding: 0 8px;
-    font-size: 11px;
+  .admin-sidebar nav {
+    gap: 3px;
+  }
+
+  .admin-sidebar nav a,
+  .admin-sidebar nav button {
+    width: 38px;
+    min-height: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .admin-sidebar nav .nav-icon {
+    display: block;
+  }
+
+  .admin-sidebar nav .nav-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
   }
 
   .admin-mobile-signout {
     display: flex !important;
-    min-height: 38px;
-    padding: 0 8px !important;
-    font-size: 11px !important;
   }
 
   .admin-content {
@@ -2036,17 +2253,23 @@ input:focus-visible {
 
   .admin-topbar-actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
 
   .admin-topbar-actions > button {
-    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .copy-week-button {
+    grid-column: 1 / -1;
   }
 
   .admin-topbar h1 {
     font-size: 40px;
   }
 
-  .admin-topbar > div > p:last-child {
+  .admin-topbar .admin-description {
     max-width: 270px;
   }
 

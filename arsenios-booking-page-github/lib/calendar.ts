@@ -68,6 +68,11 @@ export function slotDateKey(timestamp: number) {
   }).format(new Date(timestamp));
 }
 
+export function teacherCalendarDate(timestamp: number) {
+  const [year, month, day] = slotDateKey(timestamp).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
 function zoneOffset(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: TEACHER_TIME_ZONE,

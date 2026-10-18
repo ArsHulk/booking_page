@@ -10,6 +10,8 @@ import {
   monthRange,
   slotDateKey,
   startOfMonth,
+  startOfWeek,
+  weekRange,
 } from "../../../lib/calendar";
 
 type CompletedLesson = {
@@ -31,6 +33,7 @@ function shiftMonth(date: Date, amount: number) {
 export function CompletedLessons({ teacherName }: { teacherName: string }) {
   const [monthStart, setMonthStart] = useState(() => startOfMonth());
   const [lessons, setLessons] = useState<CompletedLesson[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [showCleared, setShowCleared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -42,14 +45,21 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
     if (showLoading) setLoading(true);
     try {
       const range = monthRange(monthStart);
-      const response = await fetch(`/api/admin/completed?from=${range.from}&to=${range.to}`, { cache: "no-store" });
-      if (response.status === 401) {
+      const currentWeekRange = weekRange(startOfWeek());
+      const [response, pendingResponse] = await Promise.all([
+        fetch(`/api/admin/completed?from=${range.from}&to=${range.to}`, { cache: "no-store" }),
+        fetch(`/api/admin/slots?from=${currentWeekRange.from}&to=${currentWeekRange.to}`, { cache: "no-store" }),
+      ]);
+      if (response.status === 401 || pendingResponse.status === 401) {
         window.location.assign("/admin/login");
         return;
       }
       const data = (await response.json()) as { lessons?: CompletedLesson[]; error?: string };
+      const pendingData = (await pendingResponse.json()) as { pendingCount?: number; error?: string };
       if (!response.ok || !data.lessons) throw new Error(data.error ?? "Could not load completed lessons.");
+      if (!pendingResponse.ok) throw new Error(pendingData.error ?? "Could not load pending requests.");
       setLessons(data.lessons);
+      setPendingCount(pendingData.pendingCount ?? 0);
       if (showLoading) setNotice("");
     } catch (loadError) {
       if (showLoading) {
@@ -128,10 +138,13 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
       <aside className="admin-sidebar">
         <Link className="wordmark admin-wordmark" href="/admin"><span className="wordmark-mark inverse">A</span><span>Arsenios&apos; Booking Page</span></Link>
         <nav>
-          <Link href="/admin"><span>▦</span> Weekly schedule</Link>
-          <Link className="active" href="/admin/completed"><span>✓</span> Completed lessons</Link>
-          <Link href="/" target="_blank"><span>↗</span> View booking page</Link>
-          <button className="admin-mobile-signout" onClick={() => void signOut()}><span>↪</span> Sign out</button>
+          <Link href="/admin">
+            <span className="nav-icon">▦</span><span className="nav-label">Weekly schedule</span>
+            {pendingCount ? <span className="nav-badge" aria-label={`${pendingCount} pending requests`}>{pendingCount > 9 ? "9+" : pendingCount}</span> : null}
+          </Link>
+          <Link className="active" href="/admin/completed"><span className="nav-icon">✓</span><span className="nav-label">Completed lessons</span></Link>
+          <Link href="/" target="_blank"><span className="nav-icon">↗</span><span className="nav-label">View booking page</span></Link>
+          <button className="admin-mobile-signout" onClick={() => void signOut()}><span className="nav-icon">↪</span><span className="nav-label">Sign out</span></button>
         </nav>
         <div className="admin-profile">
           <span>{teacherName.slice(0, 1).toUpperCase()}</span>
@@ -142,7 +155,7 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
 
       <section className="admin-content completed-content">
         <header className="admin-topbar">
-          <div><p className="eyebrow">Lesson history</p><h1>Completed lessons</h1><p>Clear lessons from your active list without deleting your history.</p></div>
+          <div><p className="eyebrow">Lesson history</p><h1>Completed lessons</h1><p className="admin-description">Clear lessons from your active list without deleting your history.</p></div>
         </header>
 
         <div className="stat-row completed-stat-row">

@@ -22,6 +22,14 @@ import { HomeScreenButton } from "./HomeScreenButton";
 const ROW_HEIGHT = 40;
 const REFRESH_INTERVAL = 45_000;
 
+function updatedLabel(updatedAt: number | null, now: number) {
+  if (!updatedAt) return "Updating…";
+  const elapsedMinutes = Math.floor((now - updatedAt) / 60_000);
+  if (elapsedMinutes < 1) return "Updated just now";
+  if (elapsedMinutes === 1) return "Updated 1 min ago";
+  return `Updated ${elapsedMinutes} mins ago`;
+}
+
 export function BookingCalendar() {
   const [now, setNow] = useState(() => Date.now());
   const currentWeek = useMemo(() => startOfWeek(new Date(now)), [now]);
@@ -30,6 +38,8 @@ export function BookingCalendar() {
   const [slots, setSlots] = useState<PublicSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -43,6 +53,7 @@ export function BookingCalendar() {
       if (!response.ok) throw new Error("The timetable could not be loaded.");
       const data = (await response.json()) as { slots: PublicSlot[] };
       setSlots(data.slots);
+      setLastUpdated(Date.now());
       setError("");
     } catch (loadError) {
       if (showLoading) setError(loadError instanceof Error ? loadError.message : "Please try again.");
@@ -54,6 +65,15 @@ export function BookingCalendar() {
   useEffect(() => {
     void loadSlots(true);
   }, [loadSlots]);
+
+  useEffect(() => {
+    const savedView = window.localStorage.getItem("arsenios-booking-view");
+    if (savedView === "calendar" || savedView === "list") {
+      setViewMode(savedView);
+    } else if (window.matchMedia("(max-width: 760px)").matches) {
+      setViewMode("list");
+    }
+  }, []);
 
   useEffect(() => {
     const refresh = () => {
@@ -82,6 +102,7 @@ export function BookingCalendar() {
   function changeWeek(amount: number) {
     setWeekStart((current) => addDays(current, amount * 7));
     setActiveDay(0);
+    setLastUpdated(null);
   }
 
   function returnToToday() {
@@ -89,6 +110,12 @@ export function BookingCalendar() {
     setNow(today.getTime());
     setWeekStart(startOfWeek(today));
     setActiveDay(Math.max(0, (today.getDay() || 7) - 1));
+    setLastUpdated(null);
+  }
+
+  function chooseView(view: "calendar" | "list") {
+    setViewMode(view);
+    window.localStorage.setItem("arsenios-booking-view", view);
   }
 
   function handleTouchEnd(event: React.TouchEvent) {
@@ -107,6 +134,14 @@ export function BookingCalendar() {
   const availableSlots = slots.filter((slot) => slot.status === "available");
   const activeDayKey = dateKey(days[activeDay]);
   const activeDayAvailable = availableSlots.filter((slot) => slotDateKey(slot.startAt) === activeDayKey).length;
+  const listGroups = days
+    .map((day) => ({
+      day,
+      slots: availableSlots
+        .filter((slot) => slotDateKey(slot.startAt) === dateKey(day))
+        .sort((first, second) => first.startAt - second.startAt),
+    }))
+    .filter((group) => group.slots.length > 0);
   const currentMinutes = minutesInTeacherZone(now);
   const currentLineTop = (currentMinutes - timeRows[0]) / 30 * ROW_HEIGHT;
   const showCurrentTime = currentMinutes >= timeRows[0] && currentMinutes < timeRows[timeRows.length - 1] + 30;
@@ -136,7 +171,9 @@ export function BookingCalendar() {
                 {availableSlots.length} {availableSlots.length === 1 ? "lesson" : "lessons"} available this week
               </span>
               <span className="availability-count mobile-count">
-                {activeDayAvailable} {activeDayAvailable === 1 ? "lesson" : "lessons"} available {formatDay(days[activeDay], false)}
+                {viewMode === "calendar"
+                  ? `${activeDayAvailable} ${activeDayAvailable === 1 ? "lesson" : "lessons"} available ${formatDay(days[activeDay], false)}`
+                  : `${availableSlots.length} ${availableSlots.length === 1 ? "lesson" : "lessons"} available this week`}
               </span>
             </div>
             <button className="icon-button" onClick={() => changeWeek(1)} aria-label="Next week">→</button>
@@ -150,18 +187,44 @@ export function BookingCalendar() {
             </button>
           </div>
 
-          <div className="mobile-day-tabs" aria-label="Choose a day">
-            {days.map((day, index) => (
+          <div className="availability-viewbar">
+            <div className="view-toggle" role="tablist" aria-label="Availability view">
               <button
-                key={dateKey(day)}
-                className={`${index === activeDay ? "active" : ""} ${dateKey(day) === todayKey ? "is-today" : ""}`}
-                onClick={() => setActiveDay(index)}
+                className={viewMode === "calendar" ? "active" : ""}
+                onClick={() => chooseView("calendar")}
+                role="tab"
+                aria-selected={viewMode === "calendar"}
+                aria-controls="availability-calendar"
               >
-                <span>{formatDay(day, false)}</span>
-                <strong>{day.getDate()}</strong>
+                Calendar
               </button>
-            ))}
+              <button
+                className={viewMode === "list" ? "active" : ""}
+                onClick={() => chooseView("list")}
+                role="tab"
+                aria-selected={viewMode === "list"}
+                aria-controls="availability-list"
+              >
+                List
+              </button>
+            </div>
+            <span className="refresh-status" aria-live="polite">{updatedLabel(lastUpdated, now)}</span>
           </div>
+
+          {viewMode === "calendar" ? (
+            <div className="mobile-day-tabs" aria-label="Choose a day">
+              {days.map((day, index) => (
+                <button
+                  key={dateKey(day)}
+                  className={`${index === activeDay ? "active" : ""} ${dateKey(day) === todayKey ? "is-today" : ""}`}
+                  onClick={() => setActiveDay(index)}
+                >
+                  <span>{formatDay(day, false)}</span>
+                  <strong>{day.getDate()}</strong>
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="empty-state error-state">
@@ -169,86 +232,120 @@ export function BookingCalendar() {
               <button className="secondary-button" onClick={() => void loadSlots(true)}>Try again</button>
             </div>
           ) : (
-            <div
-              className={`week-calendar ${loading ? "is-loading" : ""}`}
-              onTouchStart={(event) => {
-                const touch = event.touches[0];
-                touchStart.current = { x: touch.clientX, y: touch.clientY };
-              }}
-              onTouchEnd={handleTouchEnd}
-            >
-              <div className="calendar-header-row">
-                <div className="time-heading">Time</div>
-                {days.map((day, index) => (
-                  <div
-                    className={`day-heading ${index === activeDay ? "mobile-active" : ""} ${dateKey(day) === todayKey ? "is-today" : ""}`}
-                    key={dateKey(day)}
-                  >
-                    <span>{formatDay(day, false)}</span>
-                    <strong>{day.getDate()}</strong>
-                  </div>
-                ))}
-              </div>
-
-              <div className="calendar-scroll">
-                <div className="time-rail">
-                  {timeRows.map((minutes) => (
-                    <div key={minutes} style={{ height: ROW_HEIGHT }}>
-                      {minutes % 60 === 0 ? rowLabel(minutes) : ""}
+            viewMode === "calendar" ? (
+              <div
+                id="availability-calendar"
+                className={`week-calendar ${loading ? "is-loading" : ""}`}
+                role="tabpanel"
+                onTouchStart={(event) => {
+                  const touch = event.touches[0];
+                  touchStart.current = { x: touch.clientX, y: touch.clientY };
+                }}
+                onTouchEnd={handleTouchEnd}
+              >
+                <div className="calendar-header-row">
+                  <div className="time-heading">Time</div>
+                  {days.map((day, index) => (
+                    <div
+                      className={`day-heading ${index === activeDay ? "mobile-active" : ""} ${dateKey(day) === todayKey ? "is-today" : ""}`}
+                      key={dateKey(day)}
+                    >
+                      <span>{formatDay(day, false)}</span>
+                      <strong>{day.getDate()}</strong>
                     </div>
                   ))}
                 </div>
 
-                {days.map((day, index) => {
-                  const key = dateKey(day);
-                  const isToday = key === todayKey;
-                  const daySlots = slots.filter((slot) => slotDateKey(slot.startAt) === key);
-                  return (
-                    <div
-                      className={`day-column ${index === activeDay ? "mobile-active" : ""} ${isToday ? "is-today" : ""}`}
-                      style={{ height: timeRows.length * ROW_HEIGHT }}
-                      key={key}
-                    >
-                      <div className="grid-lines" aria-hidden="true" />
-                      {isToday && showCurrentTime ? (
-                        <div className="current-time-line" style={{ top: currentLineTop }} aria-label={`Current time ${formatTime(now)}`}>
-                          <span>{formatTime(now)}</span>
-                        </div>
-                      ) : null}
-                      {daySlots.map((slot) => {
-                        const row = (minutesInTeacherZone(slot.startAt) - timeRows[0]) / 30;
-                        if (row < 0 || row >= timeRows.length) return null;
-                        const style = { top: row * ROW_HEIGHT + 3, height: ROW_HEIGHT * 2 - 6 };
-                        return slot.status === "available" ? (
+                <div className="calendar-scroll">
+                  <div className="time-rail">
+                    {timeRows.map((minutes) => (
+                      <div key={minutes} style={{ height: ROW_HEIGHT }}>
+                        {minutes % 60 === 0 ? rowLabel(minutes) : ""}
+                      </div>
+                    ))}
+                  </div>
+
+                  {days.map((day, index) => {
+                    const key = dateKey(day);
+                    const isToday = key === todayKey;
+                    const daySlots = slots.filter((slot) => slotDateKey(slot.startAt) === key);
+                    return (
+                      <div
+                        className={`day-column ${index === activeDay ? "mobile-active" : ""} ${isToday ? "is-today" : ""}`}
+                        style={{ height: timeRows.length * ROW_HEIGHT }}
+                        key={key}
+                      >
+                        <div className="grid-lines" aria-hidden="true" />
+                        {isToday && showCurrentTime ? (
+                          <div className="current-time-line" style={{ top: currentLineTop }} aria-label={`Current time ${formatTime(now)}`}>
+                            <span>{formatTime(now)}</span>
+                          </div>
+                        ) : null}
+                        {daySlots.map((slot) => {
+                          const row = (minutesInTeacherZone(slot.startAt) - timeRows[0]) / 30;
+                          if (row < 0 || row >= timeRows.length) return null;
+                          const style = { top: row * ROW_HEIGHT + 3, height: ROW_HEIGHT * 2 - 6 };
+                          return slot.status === "available" ? (
+                            <Link
+                              className="available-slot"
+                              href={`/book?slot=${encodeURIComponent(slot.id)}`}
+                              key={slot.id}
+                              style={style}
+                              aria-label={`Book ${formatDay(day)} at ${formatTime(slot.startAt)}`}
+                            >
+                              <span>{formatTime(slot.startAt)}</span>
+                              <strong>Available</strong>
+                            </Link>
+                          ) : (
+                            <div className="taken-slot" key={slot.id} style={style} aria-label={`Taken at ${formatTime(slot.startAt)}`}>
+                              <span>{formatTime(slot.startAt)}</span>
+                              <strong>Taken</strong>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div id="availability-list" className={`availability-list ${loading ? "is-loading" : ""}`} role="tabpanel">
+                {loading && !lastUpdated ? (
+                  <div className="compact-empty-state">Loading availability…</div>
+                ) : listGroups.length ? (
+                  listGroups.map((group) => (
+                    <section className={`availability-day-group ${dateKey(group.day) === todayKey ? "is-today" : ""}`} key={dateKey(group.day)}>
+                      <div className="availability-day-label">
+                        <strong>{formatDay(group.day, false)}</strong>
+                        <span>{group.day.getDate()}</span>
+                      </div>
+                      <div className="availability-time-list">
+                        {group.slots.map((slot) => (
                           <Link
-                            className="available-slot"
+                            className="availability-list-slot"
                             href={`/book?slot=${encodeURIComponent(slot.id)}`}
                             key={slot.id}
-                            style={style}
-                            aria-label={`Book ${formatDay(day)} at ${formatTime(slot.startAt)}`}
+                            aria-label={`Book ${formatDay(group.day)} at ${formatTime(slot.startAt)}`}
                           >
-                            <span>{formatTime(slot.startAt)}</span>
-                            <strong>Available</strong>
+                            <strong>{formatTime(slot.startAt)}</strong>
+                            <span>Book</span>
                           </Link>
-                        ) : (
-                          <div className="taken-slot" key={slot.id} style={style} aria-label={`Taken at ${formatTime(slot.startAt)}`}>
-                            <span>{formatTime(slot.startAt)}</span>
-                            <strong>Taken</strong>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                        ))}
+                      </div>
+                    </section>
+                  ))
+                ) : (
+                  <div className="compact-empty-state">No available lessons this week.</div>
+                )}
               </div>
-            </div>
+            )
           )}
 
           <div className="calendar-legend">
             <span><i className="legend-swatch available" />Available</span>
-            <span><i className="legend-swatch taken" />Taken</span>
-            <span><i className="legend-swatch unavailable" />Unavailable</span>
-            <span className="swipe-hint">Swipe to change day</span>
+            {viewMode === "calendar" ? <span><i className="legend-swatch taken" />Taken</span> : null}
+            {viewMode === "calendar" ? <span><i className="legend-swatch unavailable" />Unavailable</span> : null}
+            {viewMode === "calendar" ? <span className="swipe-hint">Swipe to change day</span> : null}
             <Link className="admin-entry-link" href="/admin/login">Admin</Link>
           </div>
         </section>

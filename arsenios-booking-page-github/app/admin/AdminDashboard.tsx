@@ -28,6 +28,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
   const [activeDay, setActiveDay] = useState(() => Math.max(0, (new Date().getDay() || 7) - 1));
   const [slots, setSlots] = useState<AdminSlot[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,9 +55,10 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         window.location.assign("/admin/login");
         return;
       }
-      const data = (await response.json()) as { slots?: AdminSlot[]; error?: string };
+      const data = (await response.json()) as { slots?: AdminSlot[]; pendingCount?: number; error?: string };
       if (!response.ok || !data.slots) throw new Error(data.error ?? "Could not load this week.");
       setSlots(data.slots);
+      setPendingCount(data.pendingCount ?? 0);
       setSelectedId((current) => (data.slots?.some((slot) => slot.id === current) ? current : null));
       if (showLoading) setNotice("");
     } catch (loadError) {
@@ -159,6 +161,48 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
 
   function toggleAvailability(day: Date, minutes: number) {
     return toggleAvailabilityAt(timestampFor(day, minutes));
+  }
+
+  async function copyPreviousWeek() {
+    if (busy) return;
+    const sourceWeek = addDays(weekStart, -7);
+    const confirmedCopy = window.confirm(
+      `Copy last week's lesson times from ${formatWeek(sourceWeek)} into ${formatWeek(weekStart)}? Student names and bookings will not be copied, and existing slots will stay unchanged.`,
+    );
+    if (!confirmedCopy) return;
+
+    setBusy(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/slots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copy_previous_week",
+          weekStart: dateKey(weekStart),
+        }),
+      });
+      if (response.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const data = (await response.json()) as { copied?: number; skipped?: number; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not copy last week's availability.");
+      await loadSlots(false);
+      setNoticeTone("success");
+      if (!data.copied && !data.skipped) {
+        setNotice("There were no lesson times to copy from last week.");
+      } else {
+        setNotice(
+          `${data.copied ?? 0} ${data.copied === 1 ? "slot" : "slots"} copied${data.skipped ? `; ${data.skipped} skipped because the time was past or already occupied` : ""}.`,
+        );
+      }
+    } catch (updateError) {
+      setNoticeTone("error");
+      setNotice(updateError instanceof Error ? updateError.message : "Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function updateBooking(slot: AdminSlot, action: "approve" | "release") {
@@ -265,10 +309,13 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           <span>Arsenios&apos; Booking Page</span>
         </Link>
         <nav>
-          <Link className="active" href="/admin"><span>▦</span> Weekly schedule</Link>
-          <Link href="/admin/completed"><span>✓</span> Completed lessons</Link>
-          <Link href="/" target="_blank"><span>↗</span> View booking page</Link>
-          <button className="admin-mobile-signout" onClick={() => void signOut()}><span>↪</span> Sign out</button>
+          <Link className="active" href="/admin">
+            <span className="nav-icon">▦</span><span className="nav-label">Weekly schedule</span>
+            {pendingCount ? <span className="nav-badge" aria-label={`${pendingCount} pending requests`}>{pendingCount > 9 ? "9+" : pendingCount}</span> : null}
+          </Link>
+          <Link href="/admin/completed"><span className="nav-icon">✓</span><span className="nav-label">Completed lessons</span></Link>
+          <Link href="/" target="_blank"><span className="nav-icon">↗</span><span className="nav-label">View booking page</span></Link>
+          <button className="admin-mobile-signout" onClick={() => void signOut()}><span className="nav-icon">↪</span><span className="nav-label">Sign out</span></button>
         </nav>
         <div className="admin-profile">
           <span>{teacherName.slice(0, 1).toUpperCase()}</span>
@@ -282,9 +329,10 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           <div>
             <p className="eyebrow">Weekly schedule</p>
             <h1>Your schedule</h1>
-            <p>{isEditing ? "Choose a future half-hour start time to offer a one-hour lesson." : "Your final teaching schedule for this week."}</p>
+            {isEditing ? <p className="admin-description">Choose a future half-hour start time to offer a one-hour lesson.</p> : null}
           </div>
           <div className="admin-topbar-actions">
+            {isEditing ? <button className="secondary-button copy-week-button" onClick={() => void copyPreviousWeek()} disabled={busy} type="button">Copy last week</button> : null}
             <button className={isEditing ? "primary-button" : "secondary-button"} onClick={toggleEditing} type="button">
               {isEditing ? "Done editing" : "Edit availability"}
             </button>
@@ -304,7 +352,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
 
         <section className="admin-overview-grid" aria-label="Weekly lesson overview">
           <article className="admin-overview-card pending-overview">
-            <header><div><span className="eyebrow">Needs attention</span><h2>Pending requests</h2></div><strong>{pending.length}</strong></header>
+            <header><div><h2>Pending requests</h2></div><strong>{pending.length}</strong></header>
             {pending.length ? (
               <div className="overview-list">
                 {pending.map((slot) => (
@@ -324,7 +372,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           </article>
 
           <article className="admin-overview-card confirmed-overview">
-            <header><div><span className="eyebrow">At a glance</span><h2>Confirmed this week</h2></div><strong>{confirmed.length}</strong></header>
+            <header><div><h2>Confirmed this week</h2></div><strong>{confirmed.length}</strong></header>
             {confirmed.length ? (
               <div className="overview-list">
                 {confirmed.map((slot) => (
