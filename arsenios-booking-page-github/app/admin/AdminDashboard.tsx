@@ -314,6 +314,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
             {pendingCount ? <span className="nav-badge" aria-label={`${pendingCount} pending requests`}>{pendingCount > 9 ? "9+" : pendingCount}</span> : null}
           </Link>
           <Link href="/admin/completed"><span className="nav-icon">✓</span><span className="nav-label">Completed lessons</span></Link>
+          <Link href="/admin/students"><span className="nav-icon">◉</span><span className="nav-label">Students</span></Link>
           <Link href="/" target="_blank"><span className="nav-icon">↗</span><span className="nav-label">View booking page</span></Link>
           <button className="admin-mobile-signout" onClick={() => void signOut()}><span className="nav-icon">↪</span><span className="nav-label">Sign out</span></button>
         </nav>
@@ -332,7 +333,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
             {isEditing ? <p className="admin-description">Choose a future half-hour start time to offer a one-hour lesson.</p> : null}
           </div>
           <div className="admin-topbar-actions">
-            {isEditing ? <button className="secondary-button copy-week-button" onClick={() => void copyPreviousWeek()} disabled={busy} type="button">Copy last week</button> : null}
+            <button className="secondary-button copy-week-button" onClick={() => void copyPreviousWeek()} disabled={busy} type="button">Copy last week</button>
             <button className={isEditing ? "primary-button" : "secondary-button"} onClick={toggleEditing} type="button">
               {isEditing ? "Done editing" : "Edit availability"}
             </button>
@@ -350,7 +351,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
 
         {notice ? <div className={`admin-notice standalone-notice ${noticeTone}`} role="status">{notice}</div> : null}
 
-        <section className="admin-overview-grid" aria-label="Weekly lesson overview">
+        <section className={`admin-overview-grid ${isEditing ? "admin-overview-editing" : ""}`} aria-label="Weekly lesson overview">
           <article className="admin-overview-card pending-overview">
             <header><div><h2>Pending requests</h2></div><strong>{pending.length}</strong></header>
             {pending.length ? (
@@ -387,7 +388,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           </article>
         </section>
 
-        <section className="admin-calendar-card">
+        <section className={`admin-calendar-card ${!isEditing ? "admin-calendar-readonly" : ""}`}>
           <div className="week-toolbar admin-toolbar">
             <button className="icon-button" onClick={() => changeWeek(-1)} aria-label="Previous week">←</button>
             <div><span className="toolbar-kicker">{isEditing ? "Editing availability" : "Schedule"}</span><strong>{formatWeek(weekStart)}</strong></div>

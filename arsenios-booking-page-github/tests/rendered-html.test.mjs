@@ -44,7 +44,8 @@ test("adds live calendar context without exposing booking details", async () => 
   assert.match(calendar, /visibilitychange/);
   assert.match(calendar, /availability-list/);
   assert.match(calendar, /Updated just now/);
-  assert.match(calendar, /arsenios-booking-view/);
+  assert.match(calendar, /useState<"calendar" \| "list">\("list"\)/);
+  assert.match(calendar, /arsenios-booking-view-v2/);
   assert.match(styles, /current-time-line/);
   assert.match(styles, /availability-viewbar/);
   assert.match(styles, /feTurbulence/);
@@ -87,6 +88,8 @@ test("uses website-native admin authentication and Cloudflare configuration", as
   assert.match(adminDashboard, /calendarScroll/);
   assert.match(adminDashboard, /Copy last week/);
   assert.match(adminDashboard, /nav-badge/);
+  assert.match(adminDashboard, /admin-overview-editing/);
+  assert.match(adminDashboard, /admin-calendar-readonly/);
   assert.doesNotMatch(adminDashboard, /Your final teaching schedule for this week|Needs attention|At a glance/i);
   assert.match(auth, /HttpOnly/);
   assert.match(auth, /SameSite=Strict/);
@@ -129,4 +132,30 @@ test("tracks completed lessons without deleting cleared history", async () => {
   assert.match(schema, /clearedAt/);
   assert.match(migration, /ADD COLUMN completed_at/);
   assert.match(migration, /ADD COLUMN cleared_at/);
+});
+
+test("adds a private searchable student directory from existing lesson history", async () => {
+  const [page, directory, route, dashboard, completedPage] = await Promise.all([
+    readFile(new URL("../app/admin/students/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/students/StudentsDirectory.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/students/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/completed/CompletedLessons.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /hasAdminSession/);
+  assert.match(page, /redirect\("\/admin\/login"\)/);
+  assert.match(directory, /normalize\("NFD"\)/);
+  assert.match(directory, /toLocaleLowerCase\("el-GR"\)/);
+  assert.match(directory, /Search by name or email/);
+  assert.match(directory, /Lesson history/);
+  assert.match(directory, /Pending approval/);
+  assert.match(directory, /Completed · Active list/);
+  assert.match(route, /requireAdmin/);
+  assert.match(route, /studentEmail.*trim/s);
+  assert.match(route, /latestBookingAt/);
+  assert.match(route, /status:\s*"pending" \| "scheduled" \| "completed"/);
+  assert.match(route, /clearedAt/);
+  assert.match(dashboard, /href="\/admin\/students"/);
+  assert.match(completedPage, /href="\/admin\/students"/);
 });

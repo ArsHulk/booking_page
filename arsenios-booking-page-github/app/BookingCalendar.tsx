@@ -39,7 +39,7 @@ export function BookingCalendar() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -67,11 +67,9 @@ export function BookingCalendar() {
   }, [loadSlots]);
 
   useEffect(() => {
-    const savedView = window.localStorage.getItem("arsenios-booking-view");
+    const savedView = window.localStorage.getItem("arsenios-booking-view-v2");
     if (savedView === "calendar" || savedView === "list") {
       setViewMode(savedView);
-    } else if (window.matchMedia("(max-width: 760px)").matches) {
-      setViewMode("list");
     }
   }, []);
 
@@ -115,7 +113,7 @@ export function BookingCalendar() {
 
   function chooseView(view: "calendar" | "list") {
     setViewMode(view);
-    window.localStorage.setItem("arsenios-booking-view", view);
+    window.localStorage.setItem("arsenios-booking-view-v2", view);
   }
 
   function handleTouchEnd(event: React.TouchEvent) {

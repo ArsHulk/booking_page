@@ -143,6 +143,7 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
             {pendingCount ? <span className="nav-badge" aria-label={`${pendingCount} pending requests`}>{pendingCount > 9 ? "9+" : pendingCount}</span> : null}
           </Link>
           <Link className="active" href="/admin/completed"><span className="nav-icon">✓</span><span className="nav-label">Completed lessons</span></Link>
+          <Link href="/admin/students"><span className="nav-icon">◉</span><span className="nav-label">Students</span></Link>
           <Link href="/" target="_blank"><span className="nav-icon">↗</span><span className="nav-label">View booking page</span></Link>
           <button className="admin-mobile-signout" onClick={() => void signOut()}><span className="nav-icon">↪</span><span className="nav-label">Sign out</span></button>
         </nav>
