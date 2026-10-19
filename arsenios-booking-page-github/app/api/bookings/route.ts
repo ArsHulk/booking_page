@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { bookingSlots } from "../../../db/schema";
+import { sendAdminBookingNotification } from "../../../lib/booking-email";
 import { errorResponse } from "../../../lib/server";
 
 export async function POST(request: Request) {
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
         id: bookingSlots.id,
         startAt: bookingSlots.startAt,
         endAt: bookingSlots.endAt,
+        updatedAt: bookingSlots.updatedAt,
       });
 
     if (!slot) {
@@ -53,12 +55,28 @@ export async function POST(request: Request) {
       );
     }
 
+    let adminNotificationSent = true;
+    try {
+      await sendAdminBookingNotification({
+        id: slot.id,
+        version: slot.updatedAt.getTime(),
+        studentName: name,
+        studentEmail: email,
+        startAt: slot.startAt,
+        adminUrl: new URL("/admin", request.url).toString(),
+      });
+    } catch (notificationError) {
+      adminNotificationSent = false;
+      console.error("The booking was saved, but the admin notification could not be sent", notificationError);
+    }
+
     return Response.json({
       booking: {
         id: slot.id,
         startAt: slot.startAt.getTime(),
         endAt: slot.endAt.getTime(),
       },
+      adminNotificationSent,
     });
   } catch (error) {
     return errorResponse(error);

@@ -6,6 +6,7 @@ const CONTACT_PHONE = "+30 694 263 1232";
 type EmailEnvironment = {
   BREVO_API_KEY?: string;
   EMAIL_FROM?: string;
+  ADMIN_NOTIFICATION_EMAIL?: string;
 };
 
 export type BookingEmailKind = "confirmed" | "rejected" | "cancelled";
@@ -17,6 +18,15 @@ type BookingEmail = {
   studentName: string;
   studentEmail: string;
   startAt: Date;
+};
+
+type AdminBookingNotification = {
+  id: string;
+  version: number;
+  studentName: string;
+  studentEmail: string;
+  startAt: Date;
+  adminUrl: string;
 };
 
 function emailSettings() {
@@ -115,6 +125,56 @@ export async function sendBookingEmail(message: BookingEmail) {
       return;
     }
     console.error("Brevo rejected a booking email", response.status, detail);
+    throw new Error(`Brevo returned ${response.status}.`);
+  }
+}
+
+export async function sendAdminBookingNotification(message: AdminBookingNotification) {
+  const { apiKey, from } = emailSettings();
+  const settings = env as unknown as EmailEnvironment;
+  const notificationEmail = settings.ADMIN_NOTIFICATION_EMAIL?.trim();
+
+  if (!notificationEmail) {
+    throw new Error("ADMIN_NOTIFICATION_EMAIL is not configured.");
+  }
+
+  const when = lessonDate(message.startAt);
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: "Arsenios Booking Page", email: from },
+      to: [{ name: "Arsenios", email: notificationEmail }],
+      replyTo: { name: message.studentName, email: message.studentEmail },
+      subject: `New lesson request from ${message.studentName}`,
+      textContent: [
+        "New drum lesson request",
+        "",
+        `Name: ${message.studentName}`,
+        `Email: ${message.studentEmail}`,
+        `Requested time: ${when}`,
+        "",
+        `Open admin: ${message.adminUrl}`,
+      ].join("\n"),
+      headers: {
+        "Idempotency-Key": await idempotencyKey(
+          `${message.id}:${message.version}:admin-request:${notificationEmail}`,
+        ),
+      },
+      tags: ["drum-lesson-admin-notification"],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    if (response.status === 400 && /duplicate_parameter|duplicate/i.test(detail)) {
+      return;
+    }
+    console.error("Brevo rejected an admin booking notification", response.status, detail);
     throw new Error(`Brevo returned ${response.status}.`);
   }
 }
