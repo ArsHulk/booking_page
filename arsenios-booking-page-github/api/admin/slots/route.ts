@@ -104,28 +104,54 @@ export async function POST(request: Request) {
 
       const sourceWeek = addDays(targetWeek, -7);
       const sourceRange = weekRange(sourceWeek);
-      const [sourceSlots, targetSlots] = await Promise.all([
-        getSlotsInRange(new Date(sourceRange.from), new Date(sourceRange.to)),
-        getSlotsInRange(new Date(targetRange.from), new Date(targetRange.to)),
-      ]);
-      const sourceLessonTimes = sourceSlots;
-      const occupied = targetSlots.map((slot) => ({
-        startAt: slot.startAt.getTime(),
-        endAt: slot.endAt.getTime(),
-      }));
+      type CopySlotRow = {
+        startAt: number;
+        endAt: number;
+      };
+
+      let sourceLessonTimes: CopySlotRow[];
+      let occupied: CopySlotRow[];
+      try {
+        const [sourceResult, targetResult] = await Promise.all([
+          env.DB.prepare(
+            `SELECT start_at AS startAt, end_at AS endAt
+             FROM booking_slots
+             WHERE start_at >= ?1 AND start_at < ?2
+             ORDER BY start_at`,
+          )
+            .bind(sourceRange.from, sourceRange.to)
+            .all<CopySlotRow>(),
+          env.DB.prepare(
+            `SELECT start_at AS startAt, end_at AS endAt
+             FROM booking_slots
+             WHERE start_at >= ?1 AND start_at < ?2
+             ORDER BY start_at`,
+          )
+            .bind(targetRange.from, targetRange.to)
+            .all<CopySlotRow>(),
+        ]);
+        sourceLessonTimes = sourceResult.results;
+        occupied = targetResult.results;
+      } catch (readError) {
+        console.error("Copy previous week failed while reading slots", readError);
+        return Response.json(
+          { error: "Could not read last week's lesson times. Please try again." },
+          { status: 500 },
+        );
+      }
+
       const additions: Array<{
         id: string;
-        startAt: Date;
-        endAt: Date;
-        status: "available";
+        startAt: number;
+        endAt: number;
       }> = [];
 
       for (const slot of sourceLessonTimes) {
-        const sourceDate = teacherCalendarDate(slot.startAt.getTime());
+        const sourceDate = teacherCalendarDate(slot.startAt);
         const targetDate = addDays(sourceDate, 7);
         const copiedStartAt = timestampFor(
           targetDate,
-          minutesInTeacherZone(slot.startAt.getTime()),
+          minutesInTeacherZone(slot.startAt),
         );
         const copiedEndAt = copiedStartAt + 60 * 60 * 1000;
         const overlaps = occupied.some(
@@ -143,9 +169,8 @@ export async function POST(request: Request) {
 
         additions.push({
           id: crypto.randomUUID(),
-          startAt: new Date(copiedStartAt),
-          endAt: new Date(copiedEndAt),
-          status: "available",
+          startAt: copiedStartAt,
+          endAt: copiedEndAt,
         });
         occupied.push({ startAt: copiedStartAt, endAt: copiedEndAt });
       }
@@ -159,8 +184,8 @@ export async function POST(request: Request) {
              VALUES (?1, ?2, ?3, 'available', ?4, ?4)`,
           ).bind(
             slot.id,
-            slot.startAt.getTime(),
-            slot.endAt.getTime(),
+            slot.startAt,
+            slot.endAt,
             savedAt,
           ),
         );
