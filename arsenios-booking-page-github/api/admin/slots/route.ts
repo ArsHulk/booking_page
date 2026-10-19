@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { bookingSlots } from "../../../../db/schema";
@@ -17,11 +18,6 @@ import {
 } from "../../../../lib/calendar";
 
 export const dynamic = "force-dynamic";
-
-// D1 accepts at most 100 bound parameters per statement. Each copied slot
-// contributes several values, so keep multi-row inserts comfortably below
-// that limit even when a full teaching week is copied.
-const COPY_INSERT_BATCH_SIZE = 10;
 
 export async function GET(request: Request) {
   try {
@@ -155,11 +151,28 @@ export async function POST(request: Request) {
       }
 
       if (additions.length) {
-        const db = getDb();
-        for (let index = 0; index < additions.length; index += COPY_INSERT_BATCH_SIZE) {
-          await db
-            .insert(bookingSlots)
-            .values(additions.slice(index, index + COPY_INSERT_BATCH_SIZE));
+        const savedAt = Date.now();
+        const statements = additions.map((slot) =>
+          env.DB.prepare(
+            `INSERT INTO booking_slots
+              (id, start_at, end_at, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'available', ?4, ?4)`,
+          ).bind(
+            slot.id,
+            slot.startAt.getTime(),
+            slot.endAt.getTime(),
+            savedAt,
+          ),
+        );
+
+        try {
+          await env.DB.batch(statements);
+        } catch (copyError) {
+          console.error("Copy previous week failed while saving slots", copyError);
+          return Response.json(
+            { error: "Could not save the copied lesson times. Please try again." },
+            { status: 500 },
+          );
         }
       }
 
