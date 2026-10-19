@@ -69,6 +69,8 @@ function content(message: BookingEmail) {
       `Your drum lesson is confirmed for ${when}.`,
       "",
       `If you need to make a change, please contact me directly at ${CONTACT_PHONE}.`,
+      "",
+      "If this is your first lesson, feel free to message me on Viber, Instagram or WhatsApp with your goals or anything you'd like me to know.",
     ].join("\n");
   }
 

@@ -1,6 +1,6 @@
 import { desc, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { bookingSlots } from "../../../../db/schema";
+import { bookingSlots, studentNotes } from "../../../../db/schema";
 import { requireAdmin } from "../../../../lib/admin-auth";
 import { errorResponse } from "../../../../lib/server";
 
@@ -24,13 +24,14 @@ type StudentRecord = {
   upcomingCount: number;
   pendingCount: number;
   latestBookingAt: number;
+  note: string;
 };
 
 export async function GET(request: Request) {
   try {
     await requireAdmin(request);
     const db = getDb();
-    const [bookings, allPending] = await Promise.all([
+    const [bookings, allPending, notes] = await Promise.all([
       db
         .select({
           id: bookingSlots.id,
@@ -49,10 +50,14 @@ export async function GET(request: Request) {
         .select({ id: bookingSlots.id })
         .from(bookingSlots)
         .where(eq(bookingSlots.status, "pending")),
+      db.select().from(studentNotes),
     ]);
 
     const now = Date.now();
     const grouped = new Map<string, StudentRecord>();
+    const notesByEmail = new Map(
+      notes.map((entry) => [entry.studentEmail.toLocaleLowerCase("en"), entry.note]),
+    );
 
     for (const booking of bookings) {
       const email = booking.studentEmail?.trim() ?? "";
@@ -69,6 +74,7 @@ export async function GET(request: Request) {
         upcomingCount: 0,
         pendingCount: 0,
         latestBookingAt: startAt,
+        note: notesByEmail.get(key) ?? "",
       };
 
       if (
@@ -116,6 +122,7 @@ export async function GET(request: Request) {
           upcomingCount: student.upcomingCount,
           pendingCount: student.pendingCount,
           latestBookingAt: student.latestBookingAt,
+          note: student.note,
         }))
       .sort((first, second) =>
         first.name.localeCompare(second.name, "en", { sensitivity: "base" }),
@@ -129,6 +136,42 @@ export async function GET(request: Request) {
         0,
       ),
     });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await requireAdmin(request);
+    const payload = (await request.json()) as { email?: string; note?: string };
+    const email = payload.email?.trim().toLocaleLowerCase("en") ?? "";
+    const note = payload.note?.trim() ?? "";
+
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return Response.json({ error: "Invalid student email." }, { status: 400 });
+    }
+    if (note.length > 2000) {
+      return Response.json(
+        { error: "Student notes must be 2,000 characters or fewer." },
+        { status: 400 },
+      );
+    }
+
+    const db = getDb();
+    if (note) {
+      await db
+        .insert(studentNotes)
+        .values({ studentEmail: email, note, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: studentNotes.studentEmail,
+          set: { note, updatedAt: new Date() },
+        });
+    } else {
+      await db.delete(studentNotes).where(eq(studentNotes.studentEmail, email));
+    }
+
+    return Response.json({ ok: true, note });
   } catch (error) {
     return errorResponse(error);
   }

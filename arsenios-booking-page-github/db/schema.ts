@@ -39,3 +39,11 @@ export const adminLoginAttempts = sqliteTable("admin_login_attempts", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+export const studentNotes = sqliteTable("student_notes", {
+  studentEmail: text("student_email").primaryKey(),
+  note: text("note").notNull().default(""),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

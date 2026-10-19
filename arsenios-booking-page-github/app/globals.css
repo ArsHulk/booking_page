@@ -2425,6 +2425,68 @@ input:focus-visible {
   gap: 16px;
 }
 
+.student-note-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px 10px;
+  border-bottom: 1px solid var(--soft);
+}
+
+.student-note-panel > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-note-panel > div:first-child strong {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.student-note-panel > div:first-child small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.student-note-panel textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid #cccdc8;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.student-note-panel textarea:focus {
+  border-color: #879c84;
+  outline: 2px solid rgba(135, 156, 132, 0.18);
+  outline-offset: 1px;
+}
+
+.student-note-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-note-actions span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.student-note-actions .secondary-button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .student-history-heading strong {
   font-size: 11px;
   letter-spacing: 0.06em;

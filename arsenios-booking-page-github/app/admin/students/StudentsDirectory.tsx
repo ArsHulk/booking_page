@@ -22,6 +22,7 @@ type StudentRecord = {
   upcomingCount: number;
   pendingCount: number;
   latestBookingAt: number;
+  note: string;
 };
 
 function normalizeSearch(value: string) {
@@ -57,6 +58,8 @@ export function StudentsDirectory({ teacherName }: { teacherName: string }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteStatus, setNoteStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const loadStudents = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -128,6 +131,42 @@ export function StudentsDirectory({ teacherName }: { teacherName: string }) {
     window.location.replace("/admin/login");
   }
 
+  function toggleStudent(student: StudentRecord) {
+    if (expandedKey === student.key) {
+      setExpandedKey(null);
+      setNoteDraft("");
+    } else {
+      setExpandedKey(student.key);
+      setNoteDraft(student.note);
+    }
+    setNoteStatus("idle");
+  }
+
+  async function saveStudentNote(student: StudentRecord) {
+    setNoteStatus("saving");
+    try {
+      const response = await fetch("/api/admin/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: student.email, note: noteDraft }),
+      });
+      if (response.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const data = (await response.json()) as { note?: string; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not save this note.");
+      const savedNote = data.note ?? "";
+      setNoteDraft(savedNote);
+      setStudents((current) => current.map((record) =>
+        record.key === student.key ? { ...record, note: savedNote } : record,
+      ));
+      setNoteStatus("saved");
+    } catch {
+      setNoteStatus("error");
+    }
+  }
+
   return (
     <main className="admin-page">
       <aside className="admin-sidebar">
@@ -193,7 +232,7 @@ export function StudentsDirectory({ teacherName }: { teacherName: string }) {
                   <article className={`student-record ${expanded ? "is-expanded" : ""}`} key={student.key}>
                     <button
                       className="student-summary"
-                      onClick={() => setExpandedKey(expanded ? null : student.key)}
+                      onClick={() => toggleStudent(student)}
                       type="button"
                       aria-expanded={expanded}
                     >
@@ -207,6 +246,36 @@ export function StudentsDirectory({ teacherName }: { teacherName: string }) {
 
                     {expanded ? (
                       <div className="student-history">
+                        <div className="student-note-panel">
+                          <div>
+                            <strong>Private note</strong>
+                            <small>Only visible to you</small>
+                          </div>
+                          <textarea
+                            aria-label={`Private note about ${student.name}`}
+                            maxLength={2000}
+                            onChange={(event) => {
+                              setNoteDraft(event.target.value);
+                              setNoteStatus("idle");
+                            }}
+                            placeholder="Add anything you want to remember about this student…"
+                            rows={3}
+                            value={noteDraft}
+                          />
+                          <div className="student-note-actions">
+                            <span>
+                              {noteStatus === "saved" ? "Saved" : noteStatus === "error" ? "Could not save. Please try again." : `${noteDraft.length}/2000`}
+                            </span>
+                            <button
+                              className="secondary-button"
+                              disabled={noteStatus === "saving" || noteDraft.trim() === student.note}
+                              onClick={() => void saveStudentNote(student)}
+                              type="button"
+                            >
+                              {noteStatus === "saving" ? "Saving…" : "Save note"}
+                            </button>
+                          </div>
+                        </div>
                         <div className="student-history-heading">
                           <strong>Lesson history</strong>
                           <a href={`mailto:${student.email}`}>Email student</a>
