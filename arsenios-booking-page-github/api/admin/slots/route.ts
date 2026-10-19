@@ -11,13 +11,37 @@ import { requireAdmin } from "../../../../lib/admin-auth";
 import {
   addDays,
   dateKey,
-  minutesInTeacherZone,
-  teacherCalendarDate,
+  TEACHER_TIME_ZONE,
   timestampFor,
   weekRange,
 } from "../../../../lib/calendar";
 
 export const dynamic = "force-dynamic";
+
+function copyTimestampToNextWeek(sourceTimestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TEACHER_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(sourceTimestamp));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const year = Number(values.year);
+  const month = Number(values.month);
+  const day = Number(values.day);
+  const hour = Number(values.hour);
+  const minute = Number(values.minute);
+
+  if (![year, month, day, hour, minute].every(Number.isFinite)) {
+    throw new Error("The source lesson contains an invalid date or time");
+  }
+
+  const sourceDate = new Date(Date.UTC(year, month - 1, day, 12));
+  return timestampFor(addDays(sourceDate, 7), hour * 60 + minute);
+}
 
 export async function GET(request: Request) {
   try {
@@ -105,16 +129,16 @@ export async function POST(request: Request) {
       const sourceWeek = addDays(targetWeek, -7);
       const sourceRange = weekRange(sourceWeek);
       type CopySlotRow = {
-        startAt: number;
-        endAt: number;
+        start_at: number;
+        end_at: number;
       };
 
       let sourceLessonTimes: CopySlotRow[];
-      let occupied: CopySlotRow[];
+      let occupied: Array<{ startAt: number; endAt: number }>;
       try {
         const [sourceResult, targetResult] = await Promise.all([
           env.DB.prepare(
-            `SELECT start_at AS startAt, end_at AS endAt
+            `SELECT start_at, end_at
              FROM booking_slots
              WHERE start_at >= ?1 AND start_at < ?2
              ORDER BY start_at`,
@@ -122,7 +146,7 @@ export async function POST(request: Request) {
             .bind(sourceRange.from, sourceRange.to)
             .all<CopySlotRow>(),
           env.DB.prepare(
-            `SELECT start_at AS startAt, end_at AS endAt
+            `SELECT start_at, end_at
              FROM booking_slots
              WHERE start_at >= ?1 AND start_at < ?2
              ORDER BY start_at`,
@@ -131,7 +155,10 @@ export async function POST(request: Request) {
             .all<CopySlotRow>(),
         ]);
         sourceLessonTimes = sourceResult.results;
-        occupied = targetResult.results;
+        occupied = targetResult.results.map((slot) => ({
+          startAt: Number(slot.start_at),
+          endAt: Number(slot.end_at),
+        }));
       } catch (readError) {
         console.error("Copy previous week failed while reading slots", readError);
         return Response.json(
@@ -146,33 +173,41 @@ export async function POST(request: Request) {
         endAt: number;
       }> = [];
 
-      for (const slot of sourceLessonTimes) {
-        const sourceDate = teacherCalendarDate(slot.startAt);
-        const targetDate = addDays(sourceDate, 7);
-        const copiedStartAt = timestampFor(
-          targetDate,
-          minutesInTeacherZone(slot.startAt),
-        );
-        const copiedEndAt = copiedStartAt + 60 * 60 * 1000;
-        const overlaps = occupied.some(
-          (existing) =>
-            existing.startAt < copiedEndAt && existing.endAt > copiedStartAt,
-        );
-        if (
-          copiedStartAt <= now ||
-          copiedStartAt < targetRange.from ||
-          copiedStartAt >= targetRange.to ||
-          overlaps
-        ) {
-          continue;
-        }
+      try {
+        for (const slot of sourceLessonTimes) {
+          const sourceStartAt = Number(slot.start_at);
+          if (!Number.isFinite(sourceStartAt)) {
+            throw new Error("A source lesson has an invalid start time");
+          }
 
-        additions.push({
-          id: crypto.randomUUID(),
-          startAt: copiedStartAt,
-          endAt: copiedEndAt,
-        });
-        occupied.push({ startAt: copiedStartAt, endAt: copiedEndAt });
+          const copiedStartAt = copyTimestampToNextWeek(sourceStartAt);
+          const copiedEndAt = copiedStartAt + 60 * 60 * 1000;
+          const overlaps = occupied.some(
+            (existing) =>
+              existing.startAt < copiedEndAt && existing.endAt > copiedStartAt,
+          );
+          if (
+            copiedStartAt <= now ||
+            copiedStartAt < targetRange.from ||
+            copiedStartAt >= targetRange.to ||
+            overlaps
+          ) {
+            continue;
+          }
+
+          additions.push({
+            id: crypto.randomUUID(),
+            startAt: copiedStartAt,
+            endAt: copiedEndAt,
+          });
+          occupied.push({ startAt: copiedStartAt, endAt: copiedEndAt });
+        }
+      } catch (prepareError) {
+        console.error("Copy previous week failed while preparing slots", prepareError);
+        return Response.json(
+          { error: "Could not prepare last week's lesson times for copying (copy-v5)." },
+          { status: 500 },
+        );
       }
 
       if (additions.length) {
@@ -204,6 +239,7 @@ export async function POST(request: Request) {
       return Response.json({
         copied: additions.length,
         skipped: sourceLessonTimes.length - additions.length,
+        copyVersion: "native-v5",
       });
     }
 
