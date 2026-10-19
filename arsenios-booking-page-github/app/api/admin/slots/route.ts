@@ -101,9 +101,45 @@ export async function POST(request: Request) {
     await requireAdmin(request);
     const payload = (await request.json()) as {
       startAt?: number;
-      action?: "copy_previous_week";
+      action?: "copy_previous_week" | "undo_copy_previous_week" | "remove_availability";
       weekStart?: string;
+      slotIds?: string[];
     };
+
+    if (
+      payload.action === "undo_copy_previous_week" ||
+      payload.action === "remove_availability"
+    ) {
+      const slotIds = Array.isArray(payload.slotIds)
+        ? [...new Set(payload.slotIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 80))]
+        : [];
+
+      if (!slotIds.length || slotIds.length > 256) {
+        return Response.json({ error: "Choose at least one valid availability slot." }, { status: 400 });
+      }
+
+      try {
+        const results = await env.DB.batch(
+          slotIds.map((id) =>
+            env.DB.prepare(
+              `DELETE FROM booking_slots
+               WHERE id = ?1 AND status = 'available'`,
+            ).bind(id),
+          ),
+        );
+        const removed = results.reduce(
+          (total, result) => total + Number(result.meta.changes ?? 0),
+          0,
+        );
+        return Response.json({ removed, skipped: slotIds.length - removed });
+      } catch (removeError) {
+        console.error("Removing availability slots failed", removeError);
+        return Response.json(
+          { error: "Could not remove the selected availability. Please try again." },
+          { status: 500 },
+        );
+      }
+    }
 
     if (payload.action === "copy_previous_week") {
       const weekStartKey = payload.weekStart?.trim() ?? "";
@@ -239,6 +275,7 @@ export async function POST(request: Request) {
       return Response.json({
         copied: additions.length,
         skipped: sourceLessonTimes.length - additions.length,
+        copiedSlotIds: additions.map((slot) => slot.id),
         copyVersion: "native-v5",
       });
     }
