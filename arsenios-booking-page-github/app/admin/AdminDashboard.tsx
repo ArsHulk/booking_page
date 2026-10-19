@@ -25,10 +25,14 @@ const ROW_HEIGHT = 40;
 const REFRESH_INTERVAL = 45_000;
 
 type CompletionAction = "complete" | "uncomplete";
-type UndoCompletion = {
+type UndoAction = {
+  kind: "completion";
   slotId: string;
   action: CompletionAction;
   successMessage: string;
+} | {
+  kind: "copy";
+  slotIds: string[];
 };
 
 export function AdminDashboard({ teacherName }: { teacherName: string }) {
@@ -43,7 +47,8 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<AdminNoticeState>(null);
-  const [undoCompletion, setUndoCompletion] = useState<UndoCompletion | null>(null);
+  const [undoAction, setUndoAction] = useState<UndoAction | null>(null);
+  const [selectedAvailabilityIds, setSelectedAvailabilityIds] = useState<string[]>([]);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const calendarScroll = useRef<HTMLDivElement | null>(null);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
@@ -52,6 +57,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const confirmed = slots.filter((slot) => slot.status === "confirmed");
   const scheduled = confirmed.filter((slot) => !slot.completedAt);
   const completed = confirmed.filter((slot) => slot.completedAt);
+  const available = slots.filter((slot) => slot.status === "available");
 
   const loadSlots = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -70,13 +76,16 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       setNextLesson(data.nextLesson ?? null);
       setPendingCount(data.pendingCount ?? 0);
       setSelectedId((current) => (data.slots?.some((slot) => slot.id === current) ? current : null));
+      setSelectedAvailabilityIds((current) =>
+        current.filter((id) => data.slots?.some((slot) => slot.id === id && slot.status === "available")),
+      );
       if (showLoading) {
         setNotice(null);
-        setUndoCompletion(null);
+        setUndoAction(null);
       }
     } catch (loadError) {
       if (showLoading) {
-        setUndoCompletion(null);
+        setUndoAction(null);
         setNotice({
           tone: "error",
           message: loadError instanceof Error ? loadError.message : "Please try again.",
@@ -96,7 +105,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     const duration = notice.canUndo ? 5_000 : notice.tone === "error" ? 6_000 : 3_500;
     const timer = window.setTimeout(() => {
       setNotice(null);
-      setUndoCompletion(null);
+      setUndoAction(null);
     }, duration);
     return () => window.clearTimeout(timer);
   }, [notice]);
@@ -137,6 +146,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     setWeekStart((current) => addDays(current, amount * 7));
     setActiveDay(0);
     setSelectedId(null);
+    setSelectedAvailabilityIds([]);
   }
 
   function returnToToday() {
@@ -145,27 +155,31 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     setWeekStart(startOfWeek(today));
     setActiveDay(Math.max(0, (today.getDay() || 7) - 1));
     setSelectedId(null);
+    setSelectedAvailabilityIds([]);
   }
 
   function toggleEditing() {
     setIsEditing((current) => {
       const next = !current;
-      if (!next && selected?.status === "available") setSelectedId(null);
+      if (!next) {
+        if (selected?.status === "available") setSelectedId(null);
+        setSelectedAvailabilityIds([]);
+      }
       return next;
     });
   }
 
   function dismissNotice() {
     setNotice(null);
-    setUndoCompletion(null);
+    setUndoAction(null);
   }
 
   function showNotice(
     message: string,
     tone: "error" | "success" = "success",
-    undo: UndoCompletion | null = null,
+    undo: UndoAction | null = null,
   ) {
-    setUndoCompletion(undo);
+    setUndoAction(undo);
     setNotice({ message, tone, canUndo: Boolean(undo) });
   }
 
@@ -203,6 +217,56 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     return toggleAvailabilityAt(timestampFor(day, minutes));
   }
 
+  function toggleAvailabilitySelection(slotId: string) {
+    setSelectedAvailabilityIds((current) =>
+      current.includes(slotId)
+        ? current.filter((id) => id !== slotId)
+        : [...current, slotId],
+    );
+  }
+
+  function selectAllAvailability() {
+    setSelectedAvailabilityIds(available.map((slot) => slot.id));
+    setSelectedId(null);
+  }
+
+  async function removeSelectedAvailability() {
+    if (busy || !selectedAvailabilityIds.length) return;
+    const count = selectedAvailabilityIds.length;
+    const confirmedRemoval = window.confirm(
+      `Remove ${count} selected ${count === 1 ? "availability" : "availabilities"}? Pending and confirmed lessons will not be changed.`,
+    );
+    if (!confirmedRemoval) return;
+
+    setBusy(true);
+    dismissNotice();
+    try {
+      const response = await fetch("/api/admin/slots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "remove_availability",
+          slotIds: selectedAvailabilityIds,
+        }),
+      });
+      if (response.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const data = (await response.json()) as { removed?: number; skipped?: number; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not remove the selected availability.");
+      setSelectedAvailabilityIds([]);
+      await loadSlots(false);
+      showNotice(
+        `${data.removed ?? 0} selected ${data.removed === 1 ? "availability" : "availabilities"} removed${data.skipped ? `; ${data.skipped} kept because they were no longer available` : ""}.`,
+      );
+    } catch (updateError) {
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copyPreviousWeek() {
     if (busy) return;
     const sourceWeek = addDays(weekStart, -7);
@@ -226,7 +290,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         window.location.assign("/admin/login");
         return;
       }
-      const data = (await response.json()) as { copied?: number; skipped?: number; error?: string };
+      const data = (await response.json()) as { copied?: number; skipped?: number; copiedSlotIds?: string[]; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not copy last week's availability.");
       await loadSlots(false);
       if (!data.copied && !data.skipped) {
@@ -234,6 +298,10 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
       } else {
         showNotice(
           `${data.copied ?? 0} ${data.copied === 1 ? "slot" : "slots"} copied${data.skipped ? `; ${data.skipped} skipped because the time was past or already occupied` : ""}.`,
+          "success",
+          data.copiedSlotIds?.length
+            ? { kind: "copy", slotIds: data.copiedSlotIds }
+            : null,
         );
       }
     } catch (updateError) {
@@ -309,6 +377,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         action === "complete" ? "Lesson marked completed." : "Lesson returned to scheduled.",
         "success",
         {
+          kind: "completion",
           slotId: slot.id,
           action: action === "complete" ? "uncomplete" : "complete",
           successMessage: action === "complete" ? "Lesson returned to scheduled." : "Lesson marked completed.",
@@ -321,15 +390,36 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     }
   }
 
-  async function undoLastCompletion() {
-    if (!undoCompletion || busy) return;
-    const undo = undoCompletion;
+  async function undoLastAction() {
+    if (!undoAction || busy) return;
+    const undo = undoAction;
     setBusy(true);
     dismissNotice();
     try {
-      await requestCompletionChange(undo.slotId, undo.action);
-      await loadSlots(false);
-      showNotice(undo.successMessage);
+      if (undo.kind === "completion") {
+        await requestCompletionChange(undo.slotId, undo.action);
+        await loadSlots(false);
+        showNotice(undo.successMessage);
+      } else {
+        const response = await fetch("/api/admin/slots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "undo_copy_previous_week",
+            slotIds: undo.slotIds,
+          }),
+        });
+        if (response.status === 401) {
+          window.location.assign("/admin/login");
+          return;
+        }
+        const data = (await response.json()) as { removed?: number; skipped?: number; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "Could not undo the copied availability.");
+        await loadSlots(false);
+        showNotice(
+          `${data.removed ?? 0} copied ${data.removed === 1 ? "slot" : "slots"} removed${data.skipped ? `; ${data.skipped} kept because they were no longer available` : ""}.`,
+        );
+      }
     } catch (updateError) {
       showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
     } finally {
@@ -412,7 +502,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
 
         <AdminNotice
           notice={notice}
-          onUndo={undoCompletion ? () => void undoLastCompletion() : undefined}
+          onUndo={undoAction ? () => void undoLastAction() : undefined}
           onDismiss={dismissNotice}
         />
 
@@ -479,7 +569,35 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
             ))}
           </div>
 
-          {isEditing ? <div className="edit-mode-notice" role="status"><strong>Editing availability</strong><span>Select a future half-hour start time. Past times stay locked.</span></div> : null}
+          {isEditing ? (
+            <div className="edit-mode-notice" role="status">
+              <div className="edit-mode-copy">
+                <strong>Editing availability</strong>
+                <span>Add a new time, or tap white slots to select them for removal.</span>
+              </div>
+              <div className="availability-selection-actions">
+                <button
+                  className="selection-button"
+                  type="button"
+                  onClick={selectAllAvailability}
+                  disabled={busy || !available.length || selectedAvailabilityIds.length === available.length}
+                >
+                  Select all
+                </button>
+                {selectedAvailabilityIds.length ? (
+                  <button className="selection-button" type="button" onClick={() => setSelectedAvailabilityIds([])} disabled={busy}>Clear</button>
+                ) : null}
+                <button
+                  className="remove-selected-button"
+                  type="button"
+                  onClick={() => void removeSelectedAvailability()}
+                  disabled={busy || !selectedAvailabilityIds.length}
+                >
+                  Remove selected{selectedAvailabilityIds.length ? ` (${selectedAvailabilityIds.length})` : ""}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div
             className={`week-calendar admin-calendar ${isEditing ? "is-editing" : "is-schedule"} ${loading ? "is-loading" : ""}`}
@@ -528,15 +646,30 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                       if (row < 0 || row >= timeRows.length) return null;
                       const label = slot.status === "available" ? "Available" : slot.studentName ?? "Student";
                       const displayStatus = slot.status === "confirmed" ? (slot.completedAt ? "completed" : "scheduled") : slot.status;
+                      const isAvailabilitySelected = selectedAvailabilityIds.includes(slot.id);
                       return (
                         <button
-                          className={`admin-slot ${slot.status} ${slot.completedAt ? "completed" : ""} ${slot.id === selectedId ? "selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""}`}
+                          className={`admin-slot ${slot.status} ${slot.completedAt ? "completed" : ""} ${slot.id === selectedId ? "selected" : ""} ${isAvailabilitySelected ? "multi-selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""}`}
                           key={slot.id}
-                          onClick={() => { if (slot.status !== "available" || isEditing) setSelectedId(slot.id); }}
+                          onClick={() => {
+                            if (slot.status === "available" && isEditing) {
+                              toggleAvailabilitySelection(slot.id);
+                              setSelectedId(null);
+                            } else if (slot.status !== "available") {
+                              setSelectedId(slot.id);
+                            }
+                          }}
                           style={{ top: row * ROW_HEIGHT + 3, height: ROW_HEIGHT * 2 - 6 }}
-                          aria-label={slot.status === "available" && !isEditing ? `Available lesson at ${formatTime(slot.startAt)}` : `Open ${label} at ${formatTime(slot.startAt)}`}
+                          aria-pressed={slot.status === "available" && isEditing ? isAvailabilitySelected : undefined}
+                          aria-label={
+                            slot.status === "available" && isEditing
+                              ? `${isAvailabilitySelected ? "Deselect" : "Select"} availability at ${formatTime(slot.startAt)}`
+                              : slot.status === "available"
+                                ? `Available lesson at ${formatTime(slot.startAt)}`
+                                : `Open ${label} at ${formatTime(slot.startAt)}`
+                          }
                         >
-                          <span>{formatTime(slot.startAt)}</span><strong>{label}</strong>{slot.status !== "available" ? <small>{displayStatus}</small> : null}
+                          <span>{formatTime(slot.startAt)}</span><strong>{isAvailabilitySelected ? "Selected" : label}</strong>{slot.status !== "available" ? <small>{displayStatus}</small> : null}
                         </button>
                       );
                     })}
