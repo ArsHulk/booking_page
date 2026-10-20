@@ -41,6 +41,8 @@ export function BookingCalendar() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const calendarScroll = useRef<HTMLDivElement | null>(null);
+  const positionedView = useRef("");
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
   const loadSlots = useCallback(async (showLoading = false) => {
@@ -97,22 +99,68 @@ export function BookingCalendar() {
     };
   }, [loadSlots, weekStart]);
 
+  useEffect(() => {
+    if (viewMode !== "calendar" || loading || !calendarScroll.current) return;
+    const futureAvailable = slots
+      .filter((slot) => slot.status === "available" && slot.startAt >= now)
+      .sort((first, second) => first.startAt - second.startAt);
+    if (!futureAvailable.length) return;
+
+    const isMobile = window.matchMedia("(max-width: 720px)").matches;
+    let candidates = futureAvailable;
+    if (isMobile) {
+      const activeKey = dateKey(days[activeDay]);
+      candidates = futureAvailable.filter(
+        (slot) => slotDateKey(slot.startAt) === activeKey,
+      );
+      if (!candidates.length) {
+        const firstAvailableKey = slotDateKey(futureAvailable[0].startAt);
+        const firstAvailableDay = days.findIndex(
+          (day) => dateKey(day) === firstAvailableKey,
+        );
+        if (firstAvailableDay >= 0 && firstAvailableDay !== activeDay) {
+          setActiveDay(firstAvailableDay);
+          return;
+        }
+        candidates = futureAvailable;
+      }
+    }
+
+    const positionKey = `${dateKey(weekStart)}:${isMobile ? activeDay : "desktop"}`;
+    if (positionedView.current === positionKey) return;
+    positionedView.current = positionKey;
+    const firstMinutes = minutesInTeacherZone(candidates[0].startAt);
+    const targetTop = Math.max(
+      0,
+      ((firstMinutes - timeRows[0]) / 30) * ROW_HEIGHT - ROW_HEIGHT * 2,
+    );
+    const frame = window.requestAnimationFrame(() => {
+      calendarScroll.current?.scrollTo({ top: targetTop, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeDay, days, loading, now, slots, viewMode, weekStart]);
+
   function changeWeek(amount: number) {
+    setLoading(true);
     setWeekStart((current) => addDays(current, amount * 7));
     setActiveDay(0);
     setLastUpdated(null);
+    positionedView.current = "";
   }
 
   function returnToToday() {
     const today = new Date();
+    setLoading(true);
     setNow(today.getTime());
     setWeekStart(startOfWeek(today));
     setActiveDay(Math.max(0, (today.getDay() || 7) - 1));
     setLastUpdated(null);
+    positionedView.current = "";
   }
 
   function chooseView(view: "calendar" | "list") {
     setViewMode(view);
+    if (view === "calendar") positionedView.current = "";
     window.localStorage.setItem("arsenios-booking-view-v2", view);
   }
 
@@ -129,6 +177,13 @@ export function BookingCalendar() {
 
   const isCurrentWeek = dateKey(weekStart) === dateKey(currentWeek);
   const todayKey = slotDateKey(now);
+  const [todayYear, todayMonth, todayDay] = todayKey.split("-").map(Number);
+  const tomorrow = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay + 1, 12));
+  const tomorrowKey = [
+    tomorrow.getUTCFullYear(),
+    String(tomorrow.getUTCMonth() + 1).padStart(2, "0"),
+    String(tomorrow.getUTCDate()).padStart(2, "0"),
+  ].join("-");
   const availableSlots = slots.filter((slot) => slot.status === "available");
   const activeDayKey = dateKey(days[activeDay]);
   const activeDayAvailable = availableSlots.filter((slot) => slotDateKey(slot.startAt) === activeDayKey).length;
@@ -260,7 +315,7 @@ export function BookingCalendar() {
                   ))}
                 </div>
 
-                <div className="calendar-scroll">
+                <div className="calendar-scroll" ref={calendarScroll}>
                   <div className="time-rail">
                     {timeRows.map((minutes) => (
                       <div key={minutes} style={{ height: ROW_HEIGHT }}>
@@ -318,7 +373,13 @@ export function BookingCalendar() {
                   listGroups.map((group) => (
                     <section className={`availability-day-group ${dateKey(group.day) === todayKey ? "is-today" : ""}`} key={dateKey(group.day)}>
                       <div className="availability-day-label">
-                        <strong>{formatDay(group.day, false)}</strong>
+                        <strong>
+                          {dateKey(group.day) === todayKey
+                            ? "Today"
+                            : dateKey(group.day) === tomorrowKey
+                              ? "Tomorrow"
+                              : formatDay(group.day, false)}
+                        </strong>
                         <span>{group.day.getDate()}</span>
                       </div>
                       <div className="availability-time-list">

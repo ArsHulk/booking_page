@@ -47,6 +47,9 @@ test("adds live calendar context without exposing booking details", async () => 
   assert.match(calendar, /Arsenios has not added any availability for this week/);
   assert.match(calendar, /useState<"calendar" \| "list">\("list"\)/);
   assert.match(calendar, /arsenios-booking-view-v2/);
+  assert.match(calendar, /positionedView/);
+  assert.match(calendar, /"Today"/);
+  assert.match(calendar, /"Tomorrow"/);
   assert.match(styles, /current-time-line/);
   assert.match(styles, /availability-viewbar/);
   assert.match(styles, /feTurbulence/);
@@ -55,12 +58,14 @@ test("adds live calendar context without exposing booking details", async () => 
 });
 
 test("collects private booking email and sends the requested notifications", async () => {
-  const [form, bookingRoute, adminBookingRoute, emailService, schema] = await Promise.all([
+  const [form, bookingRoute, adminBookingRoute, emailService, setupGuide, schema, styles] = await Promise.all([
     readFile(new URL("../app/book/BookingForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/bookings/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/bookings/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/booking-email.ts", import.meta.url), "utf8"),
+    readFile(new URL("../ADMIN_NOTIFICATION_SETUP.md", import.meta.url), "utf8"),
     readFile(new URL("../schema.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(form, /type="email"/);
@@ -69,12 +74,20 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(form, /Request \$\{formatWeekday\(slot\.startAt\)\} at/);
   assert.match(form, /This time is now held while Arsenios reviews your request/);
   assert.match(bookingRoute, /studentEmail: email/);
+  assert.match(bookingRoute, /sendAdminBookingNotification/);
+  assert.match(bookingRoute, /adminNotificationSent = false/);
   assert.match(adminBookingRoute, /sendBookingEmail/);
   assert.match(emailService, /Your drum lesson is confirmed/);
   assert.match(emailService, /has been rejected/);
   assert.match(emailService, /\+30 694 263 1232/);
   assert.match(emailService, /api\.brevo\.com\/v3\/smtp\/email/);
+  assert.match(emailService, /ADMIN_NOTIFICATION_EMAIL/);
+  assert.match(emailService, /New lesson request from/);
+  assert.match(emailService, /replyTo: \{ name: message\.studentName, email: message\.studentEmail \}/);
+  assert.match(setupGuide, /No SQL or D1 migration is required/);
   assert.match(schema, /student_email TEXT/);
+  assert.match(styles, /\.request-card \.primary-button/);
+  assert.match(styles, /\.back-link[\s\S]*background: #292a27/);
 });
 
 test("uses website-native admin authentication and Cloudflare configuration", async () => {
@@ -97,6 +110,9 @@ test("uses website-native admin authentication and Cloudflare configuration", as
   assert.match(adminDashboard, /Request accepted\. Confirmation email sent/);
   assert.match(adminDashboard, /5_000/);
   assert.match(adminDashboard, /nav-badge/);
+  assert.match(adminDashboard, /Arsenios Admin/);
+  assert.match(adminDashboard, /Within 24 hours/);
+  assert.match(adminDashboard, /pendingUrgency/);
   assert.match(adminDashboard, /admin-overview-editing/);
   assert.match(adminDashboard, /admin-calendar-readonly/);
   assert.doesNotMatch(adminDashboard, /Your final teaching schedule for this week|Needs attention|At a glance/i);
@@ -119,11 +135,34 @@ test("copies lesson times without copying student bookings", async () => {
   assert.match(dashboard, /Student names and bookings will not be copied/);
   assert.match(dashboard, /copy-week-button.*isEditing.*is-editing/s);
   assert.match(styles, /\.copy-week-button:not\(\.is-editing\)\s*\{\s*display:\s*none;/s);
-  assert.match(slotsRoute, /teacherCalendarDate/);
+  assert.match(slotsRoute, /copyTimestampToNextWeek/);
+  assert.match(slotsRoute, /TEACHER_TIME_ZONE/);
   assert.match(slotsRoute, /pendingCount/);
   assert.match(slotsRoute, /nextLesson/);
   assert.match(slotsRoute, /orderBy\(asc\(bookingSlots\.startAt\)\)/);
   assert.match(slotsRoute, /status: "available"/);
+  assert.match(slotsRoute, /env\.DB\.batch\(statements\)/);
+  assert.match(slotsRoute, /SELECT start_at, end_at/);
+  assert.match(slotsRoute, /bind\(sourceRange\.from, sourceRange\.to\)/);
+  assert.match(slotsRoute, /bind\(targetRange\.from, targetRange\.to\)/);
+  assert.match(slotsRoute, /slot\.startAt,/);
+  assert.match(slotsRoute, /slot\.endAt,/);
+  assert.match(slotsRoute, /copyVersion: "native-v5"/);
+  assert.match(slotsRoute, /copiedSlotIds: additions\.map/);
+  assert.match(slotsRoute, /undo_copy_previous_week/);
+  assert.match(dashboard, /kind: "remove_availability"/);
+  assert.match(dashboard, /undoLastAction/);
+  assert.match(dashboard, /5_000/);
+  assert.match(dashboard, /Select all/);
+  assert.match(dashboard, /Remove selected/);
+  assert.match(dashboard, /remove_availability/);
+  assert.match(styles, /\.admin-slot\.available\.multi-selected/);
+  assert.match(dashboard, /move_availability/);
+  assert.match(dashboard, /add_availability_range/);
+  assert.match(dashboard, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(dashboard, /pendingUrgency/);
+  assert.match(slotsRoute, /move_availability/);
+  assert.match(slotsRoute, /add_availability_range/);
 });
 
 test("tracks completed lessons without deleting cleared history", async () => {
@@ -143,7 +182,7 @@ test("tracks completed lessons without deleting cleared history", async () => {
   assert.match(completedPage, /Clear from list/);
   assert.match(completedPage, /undoLastAction/);
   assert.match(completedPage, /5_000/);
-  assert.match(dashboard, /undoLastCompletion/);
+  assert.match(dashboard, /undoLastAction/);
   assert.match(notice, />Undo</);
   assert.match(completedRoute, /clearedAt: now/);
   assert.doesNotMatch(completedRoute, /delete\(bookingSlots\)/);

@@ -18,6 +18,19 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const LESSON_DURATION = 60 * 60 * 1000;
+const SLOT_STEP = 30 * 60 * 1000;
+const MAX_FUTURE = 180 * 24 * 60 * 60 * 1000;
+
+function validFutureStart(startAt: number, now: number) {
+  return (
+    Number.isFinite(startAt) &&
+    startAt >= now &&
+    startAt <= now + MAX_FUTURE &&
+    startAt % SLOT_STEP === 0
+  );
+}
+
 function copyTimestampToNextWeek(sourceTimestamp: number) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: TEACHER_TIME_ZONE,
@@ -51,9 +64,10 @@ export async function GET(request: Request) {
     const [rangeSlots, allPending, upcomingLessons] = await Promise.all([
       getSlotsInRange(from, to),
       db
-        .select({ id: bookingSlots.id })
+        .select()
         .from(bookingSlots)
-        .where(eq(bookingSlots.status, "pending")),
+        .where(eq(bookingSlots.status, "pending"))
+        .orderBy(asc(bookingSlots.startAt)),
       db
         .select()
         .from(bookingSlots)
@@ -78,6 +92,16 @@ export async function GET(request: Request) {
       clearedAt: slot.clearedAt?.getTime() ?? null,
     }));
     const next = upcomingLessons[0];
+    const pendingRequests = allPending.map((slot) => ({
+      id: slot.id,
+      startAt: slot.startAt.getTime(),
+      endAt: slot.endAt.getTime(),
+      status: slot.status,
+      studentName: slot.studentName,
+      studentEmail: slot.studentEmail,
+      completedAt: slot.completedAt?.getTime() ?? null,
+      clearedAt: slot.clearedAt?.getTime() ?? null,
+    }));
     const nextLesson = next
       ? {
           id: next.id,
@@ -90,7 +114,12 @@ export async function GET(request: Request) {
           clearedAt: next.clearedAt?.getTime() ?? null,
         }
       : null;
-    return Response.json({ slots, pendingCount: allPending.length, nextLesson });
+    return Response.json({
+      slots,
+      pendingRequests,
+      pendingCount: pendingRequests.length,
+      nextLesson,
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -101,10 +130,187 @@ export async function POST(request: Request) {
     await requireAdmin(request);
     const payload = (await request.json()) as {
       startAt?: number;
-      action?: "copy_previous_week" | "undo_copy_previous_week" | "remove_availability";
+      startAts?: number[];
+      action?:
+        | "copy_previous_week"
+        | "undo_copy_previous_week"
+        | "remove_availability"
+        | "add_availability_range"
+        | "move_availability";
       weekStart?: string;
       slotIds?: string[];
+      slotId?: string;
+      targetStartAt?: number;
+      copy?: boolean;
     };
+
+    if (payload.action === "add_availability_range") {
+      const now = Date.now();
+      const startAts = Array.isArray(payload.startAts)
+        ? [...new Set(payload.startAts.map(Number))].sort((first, second) => first - second)
+        : [];
+
+      if (
+        !startAts.length ||
+        startAts.length > 128 ||
+        startAts.some((startAt) => !validFutureStart(startAt, now))
+      ) {
+        return Response.json({ error: "Choose valid future lesson times." }, { status: 400 });
+      }
+
+      const rangeStart = startAts[0];
+      const rangeEnd = startAts[startAts.length - 1] + LESSON_DURATION;
+      type OccupiedRow = { start_at: number; end_at: number };
+      const occupiedResult = await env.DB.prepare(
+        `SELECT start_at, end_at
+         FROM booking_slots
+         WHERE start_at < ?2 AND end_at > ?1
+         ORDER BY start_at`,
+      )
+        .bind(rangeStart, rangeEnd)
+        .all<OccupiedRow>();
+      const occupied = occupiedResult.results.map((slot) => ({
+        startAt: Number(slot.start_at),
+        endAt: Number(slot.end_at),
+      }));
+      const additions: Array<{ id: string; startAt: number; endAt: number }> = [];
+
+      for (const startAt of startAts) {
+        const endAt = startAt + LESSON_DURATION;
+        const overlaps = occupied.some(
+          (slot) => slot.startAt < endAt && slot.endAt > startAt,
+        );
+        if (overlaps) continue;
+        const addition = { id: crypto.randomUUID(), startAt, endAt };
+        additions.push(addition);
+        occupied.push({ startAt, endAt });
+      }
+
+      if (additions.length) {
+        const savedAt = Date.now();
+        await env.DB.batch(
+          additions.map((slot) =>
+            env.DB.prepare(
+              `INSERT INTO booking_slots
+                (id, start_at, end_at, status, created_at, updated_at)
+               VALUES (?1, ?2, ?3, 'available', ?4, ?4)`,
+            ).bind(slot.id, slot.startAt, slot.endAt, savedAt),
+          ),
+        );
+      }
+
+      return Response.json({
+        added: additions.length,
+        skipped: startAts.length - additions.length,
+        addedSlotIds: additions.map((slot) => slot.id),
+      });
+    }
+
+    if (payload.action === "move_availability") {
+      const slotId = payload.slotId?.trim() ?? "";
+      const targetStartAt = Number(payload.targetStartAt);
+      const copy = payload.copy === true;
+      const now = Date.now();
+
+      if (
+        !slotId ||
+        slotId.length > 80 ||
+        !validFutureStart(targetStartAt, now)
+      ) {
+        return Response.json({ error: "Choose a valid destination." }, { status: 400 });
+      }
+
+      type AvailableRow = { id: string; start_at: number; status: string };
+      const source = await env.DB.prepare(
+        `SELECT id, start_at, status
+         FROM booking_slots
+         WHERE id = ?1
+         LIMIT 1`,
+      )
+        .bind(slotId)
+        .first<AvailableRow>();
+
+      if (!source || source.status !== "available") {
+        return Response.json(
+          { error: "That availability can no longer be moved." },
+          { status: 409 },
+        );
+      }
+
+      const sourceStartAt = Number(source.start_at);
+      if (!copy && sourceStartAt === targetStartAt) {
+        return Response.json({ unchanged: true, slotId, sourceStartAt });
+      }
+
+      const targetEndAt = targetStartAt + LESSON_DURATION;
+      const overlapQuery = copy
+        ? `SELECT id FROM booking_slots
+           WHERE start_at < ?2 AND end_at > ?1
+           LIMIT 1`
+        : `SELECT id FROM booking_slots
+           WHERE id <> ?3 AND start_at < ?2 AND end_at > ?1
+           LIMIT 1`;
+      const overlapStatement = env.DB.prepare(overlapQuery);
+      const overlap = copy
+        ? await overlapStatement.bind(targetStartAt, targetEndAt).first<{ id: string }>()
+        : await overlapStatement.bind(targetStartAt, targetEndAt, slotId).first<{ id: string }>();
+
+      if (overlap) {
+        return Response.json(
+          { error: "That destination overlaps another available or booked lesson." },
+          { status: 409 },
+        );
+      }
+
+      const changedAt = Date.now();
+      if (copy) {
+        const createdSlotId = crypto.randomUUID();
+        const result = await env.DB.prepare(
+          `INSERT INTO booking_slots
+            (id, start_at, end_at, status, created_at, updated_at)
+           SELECT ?1, ?2, ?3, 'available', ?4, ?4
+           WHERE EXISTS (
+             SELECT 1 FROM booking_slots WHERE id = ?5 AND status = 'available'
+           )
+           RETURNING id`,
+        )
+          .bind(createdSlotId, targetStartAt, targetEndAt, changedAt, slotId)
+          .first<{ id: string }>();
+        if (!result) {
+          return Response.json(
+            { error: "That availability changed before it could be copied." },
+            { status: 409 },
+          );
+        }
+        return Response.json({
+          copied: true,
+          createdSlotId,
+          sourceStartAt,
+          targetStartAt,
+        });
+      }
+
+      const moved = await env.DB.prepare(
+        `UPDATE booking_slots
+         SET start_at = ?1, end_at = ?2, updated_at = ?3
+         WHERE id = ?4 AND status = 'available'
+         RETURNING id`,
+      )
+        .bind(targetStartAt, targetEndAt, changedAt, slotId)
+        .first<{ id: string }>();
+      if (!moved) {
+        return Response.json(
+          { error: "That availability changed before it could be moved." },
+          { status: 409 },
+        );
+      }
+      return Response.json({
+        moved: true,
+        slotId,
+        sourceStartAt,
+        targetStartAt,
+      });
+    }
 
     if (
       payload.action === "undo_copy_previous_week" ||
@@ -293,7 +499,7 @@ export async function POST(request: Request) {
     }
 
     const start = new Date(startAt);
-    const end = new Date(startAt + 60 * 60 * 1000);
+    const end = new Date(startAt + LESSON_DURATION);
     const db = getDb();
     const overlapping = await db
       .select()

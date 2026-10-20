@@ -99,6 +99,15 @@ export function StudentsDirectory({ teacherName }: { teacherName: string }) {
   }, [loadStudents]);
 
   useEffect(() => {
+    document.title = pendingCount
+      ? `(${pendingCount}) Arsenios Admin`
+      : "Arsenios Admin";
+    return () => {
+      document.title = "Arsenios' Booking Page";
+    };
+  }, [pendingCount]);
+
+  useEffect(() => {
     const refresh = () => void loadStudents(false);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") refresh();

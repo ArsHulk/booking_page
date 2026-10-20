@@ -90,6 +90,15 @@ export function CompletedLessons({ teacherName }: { teacherName: string }) {
   }, [loadLessons]);
 
   useEffect(() => {
+    document.title = pendingCount
+      ? `(${pendingCount}) Arsenios Admin`
+      : "Arsenios Admin";
+    return () => {
+      document.title = "Arsenios' Booking Page";
+    };
+  }, [pendingCount]);
+
+  useEffect(() => {
     if (!notice) return;
     const duration = notice.canUndo ? 5_000 : notice.tone === "error" ? 6_000 : 3_500;
     const timer = window.setTimeout(() => {
