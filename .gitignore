@@ -1,0 +1,29 @@
+# Files GitHub should never receive.
+# This file sits at the repository root and also covers arsenios-booking-page-github/.
+
+# Secrets and local settings (passwords, API keys)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# Installed packages (recreated by `npm ci`)
+node_modules/
+
+# Build output (Cloudflare rebuilds this on every deploy)
+dist/
+.next/
+*.tsbuildinfo
+
+# Local Cloudflare/Wrangler data, including the local test database
+.wrangler/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Operating-system clutter
+.DS_Store
+Thumbs.db
