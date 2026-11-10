@@ -14,6 +14,8 @@ export type BookingEmailMessage = {
   studentName: string;
   startAt: Date;
   endAt?: Date;
+  // Link to the public booking page, so students can request another lesson.
+  siteUrl?: string;
 };
 
 const DIVIDER = "— — —";
@@ -37,6 +39,26 @@ export function emailSubject(kind: BookingEmailKind) {
   return "Your drum lesson request / Το αίτημά σου για μάθημα ντραμς";
 }
 
+function rebookEnglish(siteUrl?: string) {
+  if (!siteUrl) {
+    return `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`;
+  }
+  return [
+    `Please feel free to request another lesson here: ${siteUrl}`,
+    `Or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
+  ].join("\n");
+}
+
+function rebookGreek(siteUrl?: string) {
+  if (!siteUrl) {
+    return `Μπορείς να κλείσεις ξανά μάθημα απευθείας από τη σελίδα ή να επικοινωνήσεις μαζί μου στο ${CONTACT_PHONE}. Ζητώ συγγνώμη για την αναστάτωση!`;
+  }
+  return [
+    `Μπορείς να ζητήσεις άλλο μάθημα εδώ: ${siteUrl}`,
+    `Ή επικοινώνησε μαζί μου στο ${CONTACT_PHONE}. Ζητώ συγγνώμη για την αναστάτωση!`,
+  ].join("\n");
+}
+
 function englishContent(message: BookingEmailMessage) {
   const when = lessonDate(message.startAt, "en-GB");
 
@@ -57,13 +79,13 @@ function englishContent(message: BookingEmailMessage) {
     return [
       `Hi ${message.studentName}, unfortunately your confirmed lesson with Arsenios for ${when} has been cancelled.`,
       "Remember to remove this lesson if you've added it to your calendar - Sorry ):",
-      `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
+      rebookEnglish(message.siteUrl),
     ].join("\n\n");
   }
 
   return [
     `Hi ${message.studentName}, unfortunately your lesson with Arsenios has been rejected.`,
-    `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
+    rebookEnglish(message.siteUrl),
   ].join("\n\n");
 }
 
@@ -87,13 +109,13 @@ function greekContent(message: BookingEmailMessage) {
     return [
       `Γεια σου ${message.studentName}, δυστυχώς το επιβεβαιωμένο μάθημά σου με τον Αρσένιο για ${when} ακυρώθηκε.`,
       "Μην ξεχάσεις να αφαιρέσεις το μάθημα από το ημερολόγιό σου, αν το είχες προσθέσει - Συγγνώμη ):",
-      `Μπορείς να κλείσεις ξανά μάθημα απευθείας από τη σελίδα ή να επικοινωνήσεις μαζί μου στο ${CONTACT_PHONE}. Ζητώ συγγνώμη για την αναστάτωση!`,
+      rebookGreek(message.siteUrl),
     ].join("\n\n");
   }
 
   return [
     `Γεια σου ${message.studentName}, δυστυχώς το αίτημά σου για μάθημα με τον Αρσένιο δεν μπόρεσε να γίνει δεκτό.`,
-    `Μπορείς να κλείσεις ξανά μάθημα απευθείας από τη σελίδα ή να επικοινωνήσεις μαζί μου στο ${CONTACT_PHONE}. Ζητώ συγγνώμη για την αναστάτωση!`,
+    rebookGreek(message.siteUrl),
   ].join("\n\n");
 }
 
