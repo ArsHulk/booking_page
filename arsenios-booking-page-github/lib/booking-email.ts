@@ -1,15 +1,21 @@
 import { env } from "cloudflare:workers";
 import { TEACHER_TIME_ZONE } from "./calendar";
+import {
+  BookingEmailKind,
+  CALENDAR_FILE_NAME,
+  emailSubject,
+  emailText,
+  lessonCalendarFile,
+  toBase64,
+} from "./booking-email-content";
 
-const CONTACT_PHONE = "+30 694 263 1232";
+export type { BookingEmailKind };
 
 type EmailEnvironment = {
   BREVO_API_KEY?: string;
   EMAIL_FROM?: string;
   ADMIN_NOTIFICATION_EMAIL?: string;
 };
-
-export type BookingEmailKind = "confirmed" | "rejected" | "cancelled";
 
 type BookingEmail = {
   id: string;
@@ -18,6 +24,7 @@ type BookingEmail = {
   studentName: string;
   studentEmail: string;
   startAt: Date;
+  endAt?: Date;
 };
 
 type AdminBookingNotification = {
@@ -54,39 +61,6 @@ function lessonDate(startAt: Date) {
   }).format(startAt);
 }
 
-function subject(kind: BookingEmailKind) {
-  if (kind === "confirmed") return "Your drum lesson is confirmed";
-  if (kind === "cancelled") return "Your drum lesson has been cancelled";
-  return "Your drum lesson request";
-}
-
-function content(message: BookingEmail) {
-  const when = lessonDate(message.startAt);
-
-  if (message.kind === "confirmed") {
-    return [
-      `Hi ${message.studentName},`,
-      `Your drum lesson is confirmed for ${when}.`,
-      "",
-      `If you need to make a change, please contact me directly at ${CONTACT_PHONE}.`,
-      "",
-      "If this is your first lesson, feel free to message me on Viber, Instagram or WhatsApp with your goals or anything you'd like me to know.",
-    ].join("\n");
-  }
-
-  if (message.kind === "cancelled") {
-    return [
-      `Hi ${message.studentName}, unfortunately your confirmed lesson with Arsenios for ${when} has been cancelled.`,
-      `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
-    ].join("\n\n");
-  }
-
-  return [
-    `Hi ${message.studentName}, unfortunately your lesson with Arsenios has been rejected.`,
-    `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
-  ].join("\n\n");
-}
-
 async function idempotencyKey(value: string) {
   const digest = new Uint8Array(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
@@ -110,8 +84,15 @@ export async function sendBookingEmail(message: BookingEmail) {
     body: JSON.stringify({
       sender: { name: "Arsenios", email: from },
       to: [{ name: message.studentName, email: message.studentEmail }],
-      subject: subject(message.kind),
-      textContent: content(message),
+      subject: emailSubject(message.kind),
+      textContent: emailText(message),
+      ...(message.kind === "confirmed"
+        ? {
+            attachment: [
+              { name: CALENDAR_FILE_NAME, content: toBase64(lessonCalendarFile(message)) },
+            ],
+          }
+        : {}),
       headers: {
         "Idempotency-Key": await idempotencyKey(
           `${message.id}:${message.version}:${message.kind}:${message.studentEmail}`,
