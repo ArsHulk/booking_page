@@ -1002,6 +1002,30 @@ input:focus-visible {
   margin: 8px 0 24px;
 }
 
+.form-help.saved-details-note {
+  margin: -14px 0 24px;
+}
+
+.text-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #d9dad5;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: #fff;
+}
+
+.confirmation-state .muted-copy.change-note {
+  margin-top: -14px;
+  font-size: 12px;
+}
+
 .form-error {
   margin: -8px 0 18px;
   font-size: 13px;

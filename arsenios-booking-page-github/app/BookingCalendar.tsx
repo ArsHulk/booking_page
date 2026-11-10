@@ -288,7 +288,7 @@ export function BookingCalendar() {
             <div className="compact-empty-state">Loading availability…</div>
           ) : slots.length === 0 ? (
             <div className="compact-empty-state no-availability-state">
-              Arsenios has not added any availability for this week.
+              Arsenios has not added any availability for this week yet. Please check back again or contact directly to enquire.
             </div>
           ) : (
             viewMode === "calendar" ? (

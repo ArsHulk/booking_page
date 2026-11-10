@@ -44,7 +44,7 @@ test("adds live calendar context without exposing booking details", async () => 
   assert.match(calendar, /visibilitychange/);
   assert.match(calendar, /availability-list/);
   assert.match(calendar, /Updated just now/);
-  assert.match(calendar, /Arsenios has not added any availability for this week/);
+  assert.match(calendar, /Arsenios has not added any availability for this week yet\. Please check back again or contact directly to enquire\./);
   assert.match(calendar, /useState<"calendar" \| "list">\("list"\)/);
   assert.match(calendar, /arsenios-booking-view-v2/);
   assert.match(calendar, /positionedView/);
@@ -72,7 +72,10 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(form, /Your first name/);
   assert.match(form, /autoComplete="given-name"/);
   assert.match(form, /Request \$\{formatWeekday\(slot\.startAt\)\} at/);
-  assert.match(form, /This time is now held while Arsenios reviews your request/);
+  assert.match(form, /Your request was received\. Arsenios will review it shortly/);
+  assert.match(form, /Need to change or cancel\? Please contact Arsenios directly\./);
+  assert.match(form, /arsenios-booking-student-v1/);
+  assert.match(form, /Not you\? Clear/);
   assert.match(bookingRoute, /studentEmail: email/);
   assert.match(bookingRoute, /sendAdminBookingNotification/);
   assert.match(bookingRoute, /adminNotificationSent = false/);
