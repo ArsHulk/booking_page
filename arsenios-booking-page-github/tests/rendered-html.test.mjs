@@ -80,6 +80,7 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(form, /Need to change or cancel\? Please contact Arsenios directly\./);
   assert.match(form, /arsenios-booking-student-v1/);
   assert.match(form, /Not you\? Clear/);
+  assert.match(form, /Book another lesson/);
   assert.match(bookingRoute, /studentEmail: email/);
   assert.match(bookingRoute, /sendAdminBookingNotification/);
   assert.match(bookingRoute, /adminNotificationSent = false/);
@@ -93,6 +94,8 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(emailService, /Το μάθημα ντραμς σου επιβεβαιώθηκε/);
   assert.match(emailService, /Remember to remove this lesson if you've added it to your calendar/);
   assert.match(emailService, /BEGIN:VCALENDAR/);
+  assert.match(emailService, /request another lesson here: \$\{siteUrl\}/);
+  assert.match(adminBookingRoute, /siteUrl: new URL\("\/", request\.url\)/);
   assert.match(emailService, /ADMIN_NOTIFICATION_EMAIL/);
   assert.match(emailService, /New lesson request from/);
   assert.match(emailService, /replyTo: \{ name: message\.studentName, email: message\.studentEmail \}/);

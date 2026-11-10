@@ -25,6 +25,7 @@ type BookingEmail = {
   studentEmail: string;
   startAt: Date;
   endAt?: Date;
+  siteUrl?: string;
 };
 
 type AdminBookingNotification = {

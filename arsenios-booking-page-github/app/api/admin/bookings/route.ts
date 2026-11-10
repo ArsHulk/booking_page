@@ -53,6 +53,7 @@ export async function PATCH(request: Request) {
           studentEmail: booking.studentEmail,
           startAt: booking.startAt,
           endAt: booking.endAt,
+          siteUrl: new URL("/", request.url).toString(),
         });
       } catch (emailError) {
         console.error(emailError);

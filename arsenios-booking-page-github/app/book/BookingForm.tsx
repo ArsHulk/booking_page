@@ -126,7 +126,7 @@ export function BookingForm({ slotId }: { slotId: string }) {
             </div>
             <p className="muted-copy">Your request was received. Arsenios will review it shortly and you&apos;ll receive an email once accepted or declined!</p>
             <p className="muted-copy change-note">Need to change or cancel? Please contact Arsenios directly.</p>
-            <Link className="primary-button" href="/">Return to timetable</Link>
+            <Link className="primary-button" href="/">Book another lesson</Link>
           </div>
         ) : loading ? (
           <div className="form-loading">Loading your selected lesson…</div>
