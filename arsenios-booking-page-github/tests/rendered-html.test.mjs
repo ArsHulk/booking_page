@@ -161,6 +161,9 @@ test("copies lesson times without copying student bookings", async () => {
   assert.match(dashboard, /add_availability_range/);
   assert.match(dashboard, /Open slots<\/span><strong>\{available\.filter\(\(slot\) => slot\.startAt > now\)\.length\}/);
   assert.match(dashboard, /copyModifierRef/);
+  assert.match(dashboard, /isPassed \? "Passed"/);
+  assert.match(dashboard, /visibleChange/);
+  assert.match(styles, /\.admin-slot\.available\.is-passed/);
   assert.match(dashboard, /setPointerCapture/);
   assert.match(dashboard, /pointerDropTarget/);
   assert.match(dashboard, /current\.copy \|\|/);
