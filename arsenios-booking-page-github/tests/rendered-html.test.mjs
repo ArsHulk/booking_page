@@ -197,6 +197,10 @@ test("tracks completed lessons without deleting cleared history", async () => {
 
   assert.match(dashboard, /Pending requests/);
   assert.match(dashboard, /Confirmed this week/);
+  assert.match(dashboard, /Mark finished as completed/);
+  assert.match(dashboard, /kind: "completion_bulk"/);
+  assert.match(dashboard, /return "Expired"/);
+  assert.match(dashboard, /Requested today/);
   assert.match(dashboard, /Mark completed/);
   assert.match(completedPage, /Show cleared history/);
   assert.match(completedPage, /Clear from list/);
