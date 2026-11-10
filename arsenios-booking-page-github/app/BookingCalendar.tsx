@@ -13,11 +13,14 @@ import {
   rowLabel,
   slotDateKey,
   startOfWeek,
+  teacherToday,
+  teacherWeekdayIndex,
   timeRows,
   weekDays,
   weekRange,
 } from "../lib/calendar";
 import { HomeScreenButton } from "./HomeScreenButton";
+import { LocalTimeNote } from "./LocalTimeNote";
 
 const ROW_HEIGHT = 40;
 const REFRESH_INTERVAL = 45_000;
@@ -32,9 +35,9 @@ function updatedLabel(updatedAt: number | null, now: number) {
 
 export function BookingCalendar() {
   const [now, setNow] = useState(() => Date.now());
-  const currentWeek = useMemo(() => startOfWeek(new Date(now)), [now]);
+  const currentWeek = useMemo(() => startOfWeek(teacherToday(now)), [now]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [activeDay, setActiveDay] = useState(() => Math.max(0, (new Date().getDay() || 7) - 1));
+  const [activeDay, setActiveDay] = useState(() => teacherWeekdayIndex());
   const [slots, setSlots] = useState<PublicSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -78,11 +81,11 @@ export function BookingCalendar() {
   useEffect(() => {
     const refresh = () => {
       const refreshedAt = Date.now();
-      const refreshedWeek = startOfWeek(new Date(refreshedAt));
+      const refreshedWeek = startOfWeek(teacherToday(refreshedAt));
       setNow(refreshedAt);
       if (dateKey(weekStart) < dateKey(refreshedWeek)) {
         setWeekStart(refreshedWeek);
-        setActiveDay(Math.max(0, (new Date(refreshedAt).getDay() || 7) - 1));
+        setActiveDay(teacherWeekdayIndex(refreshedAt));
       }
       void loadSlots(false);
     };
@@ -149,11 +152,11 @@ export function BookingCalendar() {
   }
 
   function returnToToday() {
-    const today = new Date();
+    const nowMs = Date.now();
     setLoading(true);
-    setNow(today.getTime());
-    setWeekStart(startOfWeek(today));
-    setActiveDay(Math.max(0, (today.getDay() || 7) - 1));
+    setNow(nowMs);
+    setWeekStart(startOfWeek(teacherToday(nowMs)));
+    setActiveDay(teacherWeekdayIndex(nowMs));
     setLastUpdated(null);
     positionedView.current = "";
   }
@@ -263,6 +266,7 @@ export function BookingCalendar() {
             </div>
             <span className="refresh-status" aria-live="polite">{updatedLabel(lastUpdated, now)}</span>
           </div>
+          <LocalTimeNote />
 
           {viewMode === "calendar" ? (
             <div className="mobile-day-tabs" aria-label="Choose a day">

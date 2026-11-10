@@ -14,6 +14,8 @@ import {
   rowLabel,
   slotDateKey,
   startOfWeek,
+  teacherToday,
+  teacherWeekdayIndex,
   timeRows,
   timestampFor,
   weekDays,
@@ -105,7 +107,7 @@ function paintStartTimes(paint: PaintState) {
 export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const [now, setNow] = useState(() => Date.now());
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [activeDay, setActiveDay] = useState(() => Math.max(0, (new Date().getDay() || 7) - 1));
+  const [activeDay, setActiveDay] = useState(() => teacherWeekdayIndex());
   const [slots, setSlots] = useState<AdminSlot[]>([]);
   const [pendingRequests, setPendingRequests] = useState<AdminSlot[]>([]);
   const [nextLesson, setNextLesson] = useState<AdminSlot | null>(null);
@@ -246,10 +248,10 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   }
 
   function returnToToday() {
-    const today = new Date();
-    setNow(today.getTime());
-    setWeekStart(startOfWeek(today));
-    setActiveDay(Math.max(0, (today.getDay() || 7) - 1));
+    const nowMs = Date.now();
+    setNow(nowMs);
+    setWeekStart(startOfWeek(teacherToday(nowMs)));
+    setActiveDay(teacherWeekdayIndex(nowMs));
     setSelectedId(null);
     setSelectedAvailabilityIds([]);
     setUndoAction(null);
@@ -940,7 +942,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const currentMinutes = minutesInTeacherZone(now);
   const currentLineTop = (currentMinutes - timeRows[0]) / 30 * ROW_HEIGHT;
   const showCurrentTime = currentMinutes >= timeRows[0] && currentMinutes < timeRows[timeRows.length - 1] + 30;
-  const isCurrentWeek = dateKey(weekStart) === dateKey(startOfWeek(new Date(now)));
+  const isCurrentWeek = dateKey(weekStart) === dateKey(startOfWeek(teacherToday(now)));
   const activeDayKey = dateKey(days[activeDay]);
   const paintPreviewStarts = new Set(
     paintState ? paintStartTimes(paintState) : [],

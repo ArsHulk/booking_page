@@ -27,7 +27,20 @@ export const timeRows = Array.from(
   (_, index) => DAY_START_MINUTES + index * STEP_MINUTES,
 );
 
-export function startOfWeek(date = new Date()) {
+// Calendar days in this app are Date objects at local noon whose year/month/day
+// are the *Athens* date. "Today" must therefore come from Athens time, never
+// from the visitor's own clock, or a student abroad sees the wrong day/week.
+export function teacherToday(now: number = Date.now()) {
+  const [year, month, day] = slotDateKey(now).split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+// Monday = 0 … Sunday = 6, for today's date in Athens.
+export function teacherWeekdayIndex(now: number = Date.now()) {
+  return (teacherToday(now).getDay() || 7) - 1;
+}
+
+export function startOfWeek(date = teacherToday()) {
   const result = new Date(date);
   result.setHours(12, 0, 0, 0);
   const day = result.getDay() || 7;
@@ -35,7 +48,7 @@ export function startOfWeek(date = new Date()) {
   return result;
 }
 
-export function startOfMonth(date = new Date()) {
+export function startOfMonth(date = teacherToday()) {
   const result = new Date(date);
   result.setHours(12, 0, 0, 0);
   result.setDate(1);
@@ -73,9 +86,9 @@ export function teacherCalendarDate(timestamp: number) {
   return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
-function zoneOffset(timestamp: number) {
+function zoneOffset(timestamp: number, timeZone: string = TEACHER_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TEACHER_TIME_ZONE,
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -193,6 +206,63 @@ export function formatMonth(monthStart: Date) {
     month: "long",
     year: "numeric",
   }).format(monthStart);
+}
+
+// ---- Visitor's own time zone (shown only to students outside Athens time) ----
+
+export function visitorTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
+// Minutes the visitor is ahead of Athens (negative = behind) at that moment.
+export function minutesAheadOfTeacher(timeZone: string, timestamp: number = Date.now()) {
+  try {
+    return Math.round((zoneOffset(timestamp, timeZone) - zoneOffset(timestamp)) / 60_000);
+  } catch {
+    return 0;
+  }
+}
+
+export function describeTimeDifference(minutesAhead: number) {
+  const total = Math.abs(minutesAhead);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  const parts = [
+    hours ? `${hours} ${hours === 1 ? "hour" : "hours"}` : "",
+    minutes ? `${minutes} minutes` : "",
+  ].filter(Boolean);
+  return `${parts.join(" ")} ${minutesAhead > 0 ? "ahead" : "behind"}`;
+}
+
+const MODERN_CITY_NAMES: Record<string, string> = {
+  Calcutta: "Kolkata",
+  Saigon: "Ho Chi Minh City",
+  Kiev: "Kyiv",
+  Rangoon: "Yangon",
+  Katmandu: "Kathmandu",
+};
+
+export function timeZoneCity(timeZone: string) {
+  const city = timeZone.split("/").pop()?.replace(/_/g, " ") ?? timeZone;
+  return MODERN_CITY_NAMES[city] ?? city;
+}
+
+export function formatVisitorSlot(timestamp: number, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(timestamp));
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.hour}:${value.minute} on ${value.weekday} ${value.day} ${value.month}`;
 }
 
 export function rowLabel(minutes: number) {

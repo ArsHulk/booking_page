@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LocalSlotTime } from "../LocalTimeNote";
 import { FormEvent, useEffect, useState } from "react";
 import {
   formatLongDate,
@@ -123,6 +124,7 @@ export function BookingForm({ slotId }: { slotId: string }) {
             <div className="confirmation-slot">
               <strong>{formatLongDate(slot.startAt)}</strong>
               <span>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</span>
+              <LocalSlotTime startAt={slot.startAt} />
             </div>
             <p className="muted-copy">Your request was received. Arsenios will review it shortly and you&apos;ll receive an email once accepted or declined!</p>
             <p className="muted-copy change-note">Need to change or cancel? Please contact Arsenios directly.</p>
@@ -146,6 +148,7 @@ export function BookingForm({ slotId }: { slotId: string }) {
               <span>Selected lesson</span>
               <strong>{formatLongDate(slot.startAt)}</strong>
               <em>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</em>
+              <LocalSlotTime startAt={slot.startAt} />
             </div>
             <form onSubmit={submitRequest}>
               <label htmlFor="student-name">Your first name</label>

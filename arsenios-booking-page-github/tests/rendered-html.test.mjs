@@ -47,6 +47,9 @@ test("adds live calendar context without exposing booking details", async () => 
   assert.match(calendar, /Arsenios has not added any availability for this week yet\. Please check back again or contact directly to enquire\./);
   assert.match(calendar, /useState<"calendar" \| "list">\("list"\)/);
   assert.match(calendar, /arsenios-booking-view-v2/);
+  assert.match(calendar, /teacherToday\(now\)/);
+  assert.doesNotMatch(calendar, /getDay\(\)/);
+  assert.match(calendar, /<LocalTimeNote \/>/);
   assert.match(calendar, /positionedView/);
   assert.match(calendar, /"Today"/);
   assert.match(calendar, /"Tomorrow"/);
@@ -79,6 +82,7 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(form, /Need to change or cancel\? Please contact Arsenios directly\./);
   assert.match(form, /arsenios-booking-student-v1/);
   assert.match(form, /Not you\? Clear/);
+  assert.match(form, /<LocalSlotTime startAt=\{slot\.startAt\} \/>/);
   assert.match(bookingRoute, /studentEmail: email/);
   assert.match(bookingRoute, /sendAdminBookingNotification/);
   assert.match(bookingRoute, /adminNotificationSent = false/);
@@ -92,6 +96,9 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(emailService, /Το μάθημα ντραμς σου επιβεβαιώθηκε/);
   assert.match(emailService, /Remember to remove this lesson if you've added it to your calendar/);
   assert.match(emailService, /BEGIN:VCALENDAR/);
+  assert.match(emailService, /\(Athens time\)/);
+  assert.match(emailService, /please double check to confirm!/);
+  assert.match(emailService, /\(ώρα Ελλάδας\)/);
   assert.match(emailService, /ADMIN_NOTIFICATION_EMAIL/);
   assert.match(emailService, /New lesson request from/);
   assert.match(emailService, /replyTo: \{ name: message\.studentName, email: message\.studentEmail \}/);
@@ -235,4 +242,20 @@ test("adds a private searchable student directory from existing lesson history",
   assert.match(route, /clearedAt/);
   assert.match(dashboard, /href="\/admin\/students"/);
   assert.match(completedPage, /href="\/admin\/students"/);
+});
+
+test("uses Athens time for today and only notes local time for visitors abroad", async () => {
+  const [calendarLib, note, dashboard] = await Promise.all([
+    readFile(new URL("../lib/calendar.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/LocalTimeNote.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/AdminDashboard.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(calendarLib, /export function teacherToday/);
+  assert.match(calendarLib, /export function startOfWeek\(date = teacherToday\(\)\)/);
+  assert.match(calendarLib, /export function startOfMonth\(date = teacherToday\(\)\)/);
+  assert.match(note, /if \(minutesAhead === 0\) return;/);
+  assert.match(note, /if \(!zone\) return null;/);
+  assert.doesNotMatch(dashboard, /getDay\(\)/);
+  assert.match(dashboard, /teacherWeekdayIndex/);
 });

@@ -43,7 +43,8 @@ function englishContent(message: BookingEmailMessage) {
   if (message.kind === "confirmed") {
     return [
       `Hi ${message.studentName},`,
-      `Your drum lesson is confirmed for ${when}.`,
+      `Your drum lesson is confirmed for ${when} (Athens time).`,
+      "Note: this is in Athens time, not your timezone - please double check to confirm! The attached calendar file will show it in your own local time.",
       "",
       `To add this lesson to your calendar, open the attached file ("${CALENDAR_FILE_NAME}") on your phone/computer and tap 'Add' so you don't miss it!`,
       "",
@@ -55,7 +56,7 @@ function englishContent(message: BookingEmailMessage) {
 
   if (message.kind === "cancelled") {
     return [
-      `Hi ${message.studentName}, unfortunately your confirmed lesson with Arsenios for ${when} has been cancelled.`,
+      `Hi ${message.studentName}, unfortunately your confirmed lesson with Arsenios for ${when} (Athens time) has been cancelled.`,
       "Remember to remove this lesson if you've added it to your calendar - Sorry ):",
       `Please feel free to rebook directly through the site, or contact me at ${CONTACT_PHONE}. Apologies for any inconvenience caused!`,
     ].join("\n\n");
@@ -73,7 +74,8 @@ function greekContent(message: BookingEmailMessage) {
   if (message.kind === "confirmed") {
     return [
       `Γεια σου ${message.studentName},`,
-      `Το μάθημα ντραμς σου επιβεβαιώθηκε για ${when}.`,
+      `Το μάθημα ντραμς σου επιβεβαιώθηκε για ${when} (ώρα Ελλάδας).`,
+      "Σημείωση: η ώρα είναι σε ώρα Ελλάδας και όχι στη δική σου ζώνη ώρας - έλεγξέ την για επιβεβαίωση! Το συνημμένο αρχείο ημερολογίου θα τη δείξει στη δική σου τοπική ώρα.",
       "",
       `Για να προσθέσεις το μάθημα στο ημερολόγιό σου, άνοιξε το συνημμένο αρχείο ("${CALENDAR_FILE_NAME}") στο κινητό ή στον υπολογιστή σου και πάτησε «Προσθήκη», για να μην το χάσεις!`,
       "",
@@ -85,7 +87,7 @@ function greekContent(message: BookingEmailMessage) {
 
   if (message.kind === "cancelled") {
     return [
-      `Γεια σου ${message.studentName}, δυστυχώς το επιβεβαιωμένο μάθημά σου με τον Αρσένιο για ${when} ακυρώθηκε.`,
+      `Γεια σου ${message.studentName}, δυστυχώς το επιβεβαιωμένο μάθημά σου με τον Αρσένιο για ${when} (ώρα Ελλάδας) ακυρώθηκε.`,
       "Μην ξεχάσεις να αφαιρέσεις το μάθημα από το ημερολόγιό σου, αν το είχες προσθέσει - Συγγνώμη ):",
       `Μπορείς να κλείσεις ξανά μάθημα απευθείας από τη σελίδα ή να επικοινωνήσεις μαζί μου στο ${CONTACT_PHONE}. Ζητώ συγγνώμη για την αναστάτωση!`,
     ].join("\n\n");
