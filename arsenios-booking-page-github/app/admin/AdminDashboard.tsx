@@ -33,6 +33,11 @@ type UndoAction = {
   action: CompletionAction;
   successMessage: string;
 } | {
+  kind: "completion_bulk";
+  slotIds: string[];
+  action: CompletionAction;
+  successMessage: string;
+} | {
   kind: "remove_availability";
   slotIds: string[];
   successMessage: string;
@@ -66,6 +71,8 @@ type SlotDragState = {
 
 function pendingUrgency(startAt: number, now: number) {
   const remaining = startAt - now;
+  // The lesson time has passed without an answer.
+  if (remaining <= 0) return "expired";
   if (remaining <= 3 * DAY_MS) return "critical";
   if (remaining <= 7 * DAY_MS) return "soon";
   return "later";
@@ -73,9 +80,21 @@ function pendingUrgency(startAt: number, now: number) {
 
 function pendingUrgencyLabel(startAt: number, now: number) {
   const urgency = pendingUrgency(startAt, now);
+  if (urgency === "expired") return "Expired";
   if (urgency === "critical") return "Within 3 days";
   if (urgency === "soon") return "Within 7 days";
   return "Later";
+}
+
+// "Requested today / yesterday / 3 days ago", counted in Athens calendar days.
+function requestedLabel(requestedAt: number | null | undefined, now: number) {
+  if (!requestedAt) return null;
+  const days = Math.round(
+    (Date.parse(slotDateKey(now)) - Date.parse(slotDateKey(requestedAt))) / DAY_MS,
+  );
+  if (days <= 0) return "Requested today";
+  if (days === 1) return "Requested yesterday";
+  return `Requested ${days} days ago`;
 }
 
 function isLateChange(startAt: number, now: number) {
@@ -132,6 +151,11 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const scheduled = confirmed.filter((slot) => !slot.completedAt);
   const completed = confirmed.filter((slot) => slot.completedAt);
   const available = slots.filter((slot) => slot.status === "available");
+  // Confirmed lessons this week that have ended but aren't marked completed yet.
+  const finishedNotCompleted = scheduled.filter((slot) => slot.endAt <= now);
+  const selectedRequestedAt = selected
+    ? pendingRequests.find((slot) => slot.id === selected.id)?.requestedAt ?? null
+    : null;
 
   const loadSlots = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -755,6 +779,33 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     }
   }
 
+  async function dismissExpired(slot: AdminSlot) {
+    if (busy) return;
+    if (!window.confirm("Dismiss this expired request? It will be removed from Pending, and the student won't be emailed.")) return;
+    setBusy(true);
+    dismissNotice();
+    try {
+      const response = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId: slot.id, action: "dismiss" }),
+      });
+      if (response.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not dismiss the request.");
+      setSelectedId(null);
+      await loadSlots(false);
+      showNotice("Expired request dismissed.");
+    } catch (updateError) {
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function requestCompletionChange(slotId: string, action: CompletionAction) {
     const response = await fetch("/api/admin/completed", {
       method: "PATCH",
@@ -798,6 +849,38 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     }
   }
 
+  async function markFinishedCompleted(lessons: AdminSlot[]) {
+    if (busy || !lessons.length) return;
+    setBusy(true);
+    dismissNotice();
+    const done: string[] = [];
+    try {
+      for (const lesson of lessons) {
+        await requestCompletionChange(lesson.id, "complete");
+        done.push(lesson.id);
+      }
+      await loadSlots(false);
+      showNotice(
+        `${done.length} ${done.length === 1 ? "lesson" : "lessons"} marked completed.`,
+        "success",
+        {
+          kind: "completion_bulk",
+          slotIds: done,
+          action: "uncomplete",
+          successMessage: `${done.length} ${done.length === 1 ? "lesson" : "lessons"} returned to scheduled.`,
+        },
+      );
+    } catch (updateError) {
+      await loadSlots(false);
+      showNotice(
+        `${done.length} marked completed, then something went wrong: ${updateError instanceof Error ? updateError.message : "please try again."}`,
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function undoLastAction() {
     if (!undoAction || busy) return;
     const undo = undoAction;
@@ -806,6 +889,12 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     try {
       if (undo.kind === "completion") {
         await requestCompletionChange(undo.slotId, undo.action);
+        await loadSlots(false);
+        showNotice(undo.successMessage);
+      } else if (undo.kind === "completion_bulk") {
+        for (const slotId of undo.slotIds) {
+          await requestCompletionChange(slotId, undo.action);
+        }
         await loadSlots(false);
         showNotice(undo.successMessage);
       } else if (undo.kind === "remove_availability") {
@@ -1028,10 +1117,17 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                       <strong>{slot.studentName ?? "Student"}</strong>
                       <span>{formatDay(new Date(slot.startAt))} · {formatTime(slot.startAt)}</span>
                       <small className={`pending-urgency-label ${urgency}`}>{pendingUrgencyLabel(slot.startAt, now)}</small>
+                      {requestedLabel(slot.requestedAt, now) ? <small className="requested-ago">{requestedLabel(slot.requestedAt, now)}</small> : null}
                     </button>
                     <div className="overview-actions">
-                      <button className="mini-approve" onClick={() => void updateBooking(slot, "approve")} disabled={busy}>Approve</button>
-                      <button className="mini-reject" onClick={() => void updateBooking(slot, "release")} disabled={busy}>Reject</button>
+                      {urgency === "expired" ? (
+                        <button className="mini-dismiss" onClick={() => void dismissExpired(slot)} disabled={busy}>Dismiss</button>
+                      ) : (
+                        <>
+                          <button className="mini-approve" onClick={() => void updateBooking(slot, "approve")} disabled={busy}>Approve</button>
+                          <button className="mini-reject" onClick={() => void updateBooking(slot, "release")} disabled={busy}>Reject</button>
+                        </>
+                      )}
                     </div>
                   </div>
                   );
@@ -1041,7 +1137,17 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           </article>
 
           <article className="admin-overview-card confirmed-overview">
-            <header><div><h2>Confirmed this week</h2></div><strong>{confirmed.length}</strong></header>
+            <header>
+              <div>
+                <h2>Confirmed this week</h2>
+                {finishedNotCompleted.length ? (
+                  <button className="bulk-complete-button" type="button" onClick={() => void markFinishedCompleted(finishedNotCompleted)} disabled={busy}>
+                    ✓ Mark finished as completed ({finishedNotCompleted.length})
+                  </button>
+                ) : null}
+              </div>
+              <strong>{confirmed.length}</strong>
+            </header>
             {confirmed.length ? (
               <div className="overview-list">
                 {confirmed.map((slot) => (
@@ -1240,6 +1346,9 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                   {pendingUrgencyLabel(selected.startAt, now)}
                 </span>
               ) : null}
+              {selected.status === "pending" && requestedLabel(selectedRequestedAt, now) ? (
+                <span className="inspector-requested">{requestedLabel(selectedRequestedAt, now)}</span>
+              ) : null}
               {selected.status === "confirmed" && !selected.completedAt && isLateChange(selected.startAt, now) ? (
                 <span className="inspector-urgency is-late-change">Within 24 hours · {lateChangeLabel(selected.startAt, now)}</span>
               ) : null}
@@ -1248,7 +1357,8 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
               {selected.studentEmail ? <a className="student-email" href={`mailto:${selected.studentEmail}`}>{selected.studentEmail}</a> : null}
             </div>
             <div className="inspector-actions">
-              {selected.status === "pending" ? <><button className="primary-button" onClick={() => void updateBooking(selected, "approve")} disabled={busy}>Approve request</button><button className="danger-button" onClick={() => void updateBooking(selected, "release")} disabled={busy}>Reject</button></> : null}
+              {selected.status === "pending" && pendingUrgency(selected.startAt, now) === "expired" ? <button className="secondary-button" onClick={() => void dismissExpired(selected)} disabled={busy}>Dismiss</button> : null}
+              {selected.status === "pending" && pendingUrgency(selected.startAt, now) !== "expired" ? <><button className="primary-button" onClick={() => void updateBooking(selected, "approve")} disabled={busy}>Approve request</button><button className="danger-button" onClick={() => void updateBooking(selected, "release")} disabled={busy}>Reject</button></> : null}
               {selected.status === "confirmed" ? (
                 <>
                   <a className="secondary-button" href={`/api/admin/calendar?slot=${encodeURIComponent(selected.id)}`}>↓ Calendar invite</a>

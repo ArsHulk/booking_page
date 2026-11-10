@@ -10,11 +10,11 @@ export async function PATCH(request: Request) {
     await requireAdmin(request);
     const payload = (await request.json()) as {
       slotId?: string;
-      action?: "approve" | "release";
+      action?: "approve" | "release" | "dismiss";
     };
 
     const slotId = payload.slotId?.trim() ?? "";
-    if (!slotId || !["approve", "release"].includes(payload.action ?? "")) {
+    if (!slotId || !["approve", "release", "dismiss"].includes(payload.action ?? "")) {
       return Response.json({ error: "Invalid booking action" }, { status: 400 });
     }
 
@@ -27,6 +27,33 @@ export async function PATCH(request: Request) {
 
     if (!booking) {
       return Response.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    // Dismiss: quietly clear a request that was never answered and whose
+    // lesson time has already passed. No email is sent to the student.
+    if (payload.action === "dismiss") {
+      if (booking.status !== "pending" || booking.startAt.getTime() > Date.now()) {
+        return Response.json(
+          { error: "Only expired requests can be dismissed" },
+          { status: 409 },
+        );
+      }
+      const [dismissed] = await db
+        .update(bookingSlots)
+        .set({
+          status: "available",
+          studentName: null,
+          studentEmail: null,
+          completedAt: null,
+          clearedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(bookingSlots.id, slotId), eq(bookingSlots.status, "pending")))
+        .returning({ id: bookingSlots.id });
+      if (!dismissed) {
+        return Response.json({ error: "That request has already changed" }, { status: 409 });
+      }
+      return Response.json({ ok: true, emailSent: false });
     }
 
     const expectedStatus = payload.action === "approve" ? "pending" : booking.status;

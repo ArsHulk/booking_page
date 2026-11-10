@@ -20,6 +20,8 @@ export type AdminSlot = CalendarSlot & {
   studentEmail: string | null;
   completedAt: number | null;
   clearedAt: number | null;
+  // When the student sent the request (pending requests only).
+  requestedAt?: number | null;
 };
 
 export const timeRows = Array.from(

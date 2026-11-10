@@ -1534,6 +1534,54 @@ input:focus-visible {
   box-shadow: inset 3px 0 0 #d2ae4c;
 }
 
+/* Pending request whose lesson time passed without an answer: quiet grey, not urgent red. */
+.overview-row.pending-urgency-expired {
+  background: #f5f5f2;
+  box-shadow: inset 3px 0 0 #a9aaa5;
+}
+
+.pending-urgency-label.expired,
+.inspector-urgency.pending-urgency-expired {
+  background: #e4e4e0;
+  color: #5d5e5a;
+}
+
+.admin-slot.pending.pending-urgency-expired {
+  border-style: dashed;
+  border-color: #b9bab5;
+  background: #ecece8;
+  color: #5d5e5a;
+}
+
+.overview-lesson .requested-ago,
+.inspector-requested {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.inspector-requested {
+  margin-left: 7px;
+}
+
+.bulk-complete-button {
+  margin-top: 8px;
+  min-height: 30px;
+  border: 1px solid #9bb998;
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #edf6eb;
+  color: #244127;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.bulk-complete-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .overview-row:last-child,
 .confirmed-list-row:last-child {
   border-bottom: 0;
@@ -1624,6 +1672,19 @@ input:focus-visible {
   color: #8e2f29;
 }
 
+.mini-dismiss {
+  min-height: 32px;
+  border: 1px solid #c9cac5;
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #fff;
+  color: #4b4c48;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.mini-dismiss:disabled,
 .mini-approve:disabled,
 .mini-reject:disabled {
   opacity: 0.5;

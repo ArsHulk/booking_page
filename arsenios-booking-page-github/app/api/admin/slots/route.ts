@@ -101,6 +101,8 @@ export async function GET(request: Request) {
       studentEmail: slot.studentEmail,
       completedAt: slot.completedAt?.getTime() ?? null,
       clearedAt: slot.clearedAt?.getTime() ?? null,
+      // A pending row is last written when the student requests it.
+      requestedAt: slot.updatedAt.getTime(),
     }));
     const nextLesson = next
       ? {
