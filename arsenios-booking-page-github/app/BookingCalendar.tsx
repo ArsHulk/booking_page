@@ -13,6 +13,7 @@ import {
   rowLabel,
   slotDateKey,
   startOfWeek,
+  teacherGmtLabel,
   timeRows,
   weekDays,
   weekRange,
@@ -206,6 +207,7 @@ export function BookingCalendar() {
           <Link href="/">Arsenios&apos; Booking Page</Link>
           <HomeScreenButton />
         </header>
+        <p className="timezone-note">Note: all times are in Athens time ({teacherGmtLabel(now)}).</p>
 
         <section className="calendar-card" aria-label="Weekly lesson availability">
           <div className="week-toolbar">

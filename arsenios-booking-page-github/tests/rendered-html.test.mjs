@@ -11,7 +11,8 @@ test("ships the public booking calendar and finished metadata", async () => {
 
   assert.match(layout, /Arsenios' Booking Page/);
   assert.match(calendar, /Arsenios&(?:apos|#39); Booking Page/);
-  assert.doesNotMatch(calendar, /Private drum lessons|Choose an available one-hour lesson|Athens time/);
+  assert.doesNotMatch(calendar, /Private drum lessons|Choose an available one-hour lesson/);
+  assert.match(calendar, /Note: all times are in Athens time \(\{teacherGmtLabel\(now\)\}\)\./);
   assert.doesNotMatch(layout, /codex-preview|Starter Project/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/i);
 });
