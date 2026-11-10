@@ -1867,6 +1867,7 @@ input:focus-visible {
 
 .admin-calendar.is-editing .admin-slot.available {
   cursor: grab;
+  user-select: none;
 }
 
 .admin-calendar.is-editing .admin-slot.available:active {

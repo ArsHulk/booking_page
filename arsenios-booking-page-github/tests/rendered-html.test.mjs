@@ -159,7 +159,11 @@ test("copies lesson times without copying student bookings", async () => {
   assert.match(styles, /\.admin-slot\.available\.multi-selected/);
   assert.match(dashboard, /move_availability/);
   assert.match(dashboard, /add_availability_range/);
-  assert.match(dashboard, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(dashboard, /copyModifierRef/);
+  assert.match(dashboard, /setPointerCapture/);
+  assert.match(dashboard, /pointerDropTarget/);
+  assert.match(dashboard, /current\.copy \|\|/);
+  assert.doesNotMatch(dashboard, /draggable=\{isEditing/);
   assert.match(dashboard, /pendingUrgency/);
   assert.match(slotsRoute, /move_availability/);
   assert.match(slotsRoute, /add_availability_range/);
