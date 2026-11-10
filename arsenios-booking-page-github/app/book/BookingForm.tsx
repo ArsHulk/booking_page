@@ -9,6 +9,37 @@ import {
   PublicSlot,
 } from "../../lib/calendar";
 
+// Saved only in this student's own browser so returning students don't retype.
+const SAVED_DETAILS_KEY = "arsenios-booking-student-v1";
+
+function readSavedDetails(): { name: string; email: string } | null {
+  try {
+    const raw = window.localStorage.getItem(SAVED_DETAILS_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { name?: unknown; email?: unknown };
+    if (typeof saved.name !== "string" || typeof saved.email !== "string") return null;
+    return { name: saved.name, email: saved.email };
+  } catch {
+    return null;
+  }
+}
+
+function saveDetails(name: string, email: string) {
+  try {
+    window.localStorage.setItem(SAVED_DETAILS_KEY, JSON.stringify({ name, email }));
+  } catch {
+    // Private browsing or storage disabled: booking still works without it.
+  }
+}
+
+function forgetDetails() {
+  try {
+    window.localStorage.removeItem(SAVED_DETAILS_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 export function BookingForm({ slotId }: { slotId: string }) {
   const [slot, setSlot] = useState<PublicSlot | null>(null);
   const [name, setName] = useState("");
@@ -17,6 +48,22 @@ export function BookingForm({ slotId }: { slotId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [complete, setComplete] = useState(false);
+  const [usingSavedDetails, setUsingSavedDetails] = useState(false);
+
+  useEffect(() => {
+    const saved = readSavedDetails();
+    if (!saved) return;
+    setName(saved.name);
+    setEmail(saved.email);
+    setUsingSavedDetails(true);
+  }, []);
+
+  function clearSavedDetails() {
+    forgetDetails();
+    setName("");
+    setEmail("");
+    setUsingSavedDetails(false);
+  }
 
   useEffect(() => {
     if (!slotId) {
@@ -51,6 +98,7 @@ export function BookingForm({ slotId }: { slotId: string }) {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Your request could not be sent.");
+      saveDetails(name.trim(), email.trim());
       setComplete(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Please try again.");
@@ -76,7 +124,8 @@ export function BookingForm({ slotId }: { slotId: string }) {
               <strong>{formatLongDate(slot.startAt)}</strong>
               <span>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</span>
             </div>
-            <p className="muted-copy">This time is now held while Arsenios reviews your request. You will receive an email when it is accepted or rejected.</p>
+            <p className="muted-copy">Your request was received. Arsenios will review it shortly and you&apos;ll receive an email once accepted or declined!</p>
+            <p className="muted-copy change-note">Need to change or cancel? Please contact Arsenios directly.</p>
             <Link className="primary-button" href="/">Return to timetable</Link>
           </div>
         ) : loading ? (
@@ -126,6 +175,12 @@ export function BookingForm({ slotId }: { slotId: string }) {
                 required
               />
               <p className="form-help">We will only use this to send the result of this booking request.</p>
+              {usingSavedDetails ? (
+                <p className="form-help saved-details-note">
+                  Filled in from your last booking on this device.{" "}
+                  <button className="text-button" type="button" onClick={clearSavedDetails}>Not you? Clear</button>
+                </p>
+              ) : null}
               {error ? <p className="form-error" role="alert">{error}</p> : null}
               <button className="primary-button full-width" disabled={submitting}>
                 {submitting ? "Sending request…" : `Request ${formatWeekday(slot.startAt)} at ${formatTime(slot.startAt)}`}
