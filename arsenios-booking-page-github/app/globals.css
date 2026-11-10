@@ -1898,6 +1898,15 @@ input:focus-visible {
   cursor: grabbing;
 }
 
+/* Open times that have already started: still visible for context, but
+   quieter so the bookable week reads at a glance. */
+.admin-slot.available.is-passed:not(.multi-selected) {
+  border-style: dashed;
+  border-color: #d3d4cf;
+  background: #f1f1ee;
+  color: #9a9b96;
+}
+
 .admin-slot.available.is-drag-source {
   opacity: 0.42;
 }

@@ -453,8 +453,15 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
         copyModifierRef.current,
     };
     suppressAvailabilityClick.current = true;
+    // Only redraw the calendar when something visible changes (new target
+    // time or copy/move mode); tiny mouse movements within the same half-hour
+    // row are ignored, which keeps dragging smooth.
+    const visibleChange =
+      !current.active ||
+      next.targetStartAt !== current.targetStartAt ||
+      next.copy !== current.copy;
     slotDragRef.current = next;
-    setSlotDrag(next);
+    if (visibleChange) setSlotDrag(next);
   }
 
   async function moveOrCopyAvailability(drag: SlotDragState) {
@@ -1174,14 +1181,15 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                     {daySlots.map((slot) => {
                       const row = (minutesInTeacherZone(slot.startAt) - timeRows[0]) / 30;
                       if (row < 0 || row >= timeRows.length) return null;
-                      const label = slot.status === "available" ? "Available" : slot.studentName ?? "Student";
+                      const isPassed = slot.status === "available" && slot.startAt <= now;
+                      const label = isPassed ? "Passed" : slot.status === "available" ? "Available" : slot.studentName ?? "Student";
                       const displayStatus = slot.status === "confirmed" ? (slot.completedAt ? "completed" : "scheduled") : slot.status;
                       const isAvailabilitySelected = selectedAvailabilityIds.includes(slot.id);
                       const urgency = slot.status === "pending" ? pendingUrgency(slot.startAt, now) : null;
                       const lateChange = slot.status === "confirmed" && !slot.completedAt && isLateChange(slot.startAt, now);
                       return (
                         <button
-                          className={`admin-slot ${slot.status} ${slot.completedAt ? "completed" : ""} ${slot.id === selectedId ? "selected" : ""} ${isAvailabilitySelected ? "multi-selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""} ${urgency ? `pending-urgency-${urgency}` : ""} ${lateChange ? "is-late-change" : ""} ${slotDrag?.slotId === slot.id ? "is-drag-source" : ""}`}
+                          className={`admin-slot ${slot.status} ${slot.completedAt ? "completed" : ""} ${slot.id === selectedId ? "selected" : ""} ${isAvailabilitySelected ? "multi-selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""} ${urgency ? `pending-urgency-${urgency}` : ""} ${lateChange ? "is-late-change" : ""} ${slotDrag?.slotId === slot.id ? "is-drag-source" : ""} ${isPassed ? "is-passed" : ""}`}
                           key={slot.id}
                           onPointerDown={(event) => beginSlotDrag(event, slot)}
                           onPointerMove={updateSlotDragTarget}
@@ -1202,7 +1210,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                             slot.status === "available" && isEditing
                               ? `${isAvailabilitySelected ? "Deselect" : "Select"} availability at ${formatTime(slot.startAt)}`
                               : slot.status === "available"
-                                ? `Available lesson at ${formatTime(slot.startAt)}`
+                                ? `${isPassed ? "Passed" : "Available"} lesson at ${formatTime(slot.startAt)}`
                                 : `Open ${label} at ${formatTime(slot.startAt)}`
                           }
                         >
