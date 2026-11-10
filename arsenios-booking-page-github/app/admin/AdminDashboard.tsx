@@ -58,6 +58,10 @@ type SlotDragState = {
   sourceStartAt: number;
   targetStartAt: number | null;
   copy: boolean;
+  pointerId: number;
+  originX: number;
+  originY: number;
+  active: boolean;
 };
 
 function pendingUrgency(startAt: number, now: number) {
@@ -119,6 +123,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   const calendarScroll = useRef<HTMLDivElement | null>(null);
   const paintStateRef = useRef<PaintState | null>(null);
   const slotDragRef = useRef<SlotDragState | null>(null);
+  const copyModifierRef = useRef(false);
   const suppressAvailabilityClick = useRef(false);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const selected = [...slots, ...pendingRequests].find((slot) => slot.id === selectedId) ?? null;
@@ -380,42 +385,76 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     void addAvailabilityRange(startAts);
   }
 
-  function beginSlotDrag(event: React.DragEvent<HTMLButtonElement>, slot: AdminSlot) {
-    if (!isEditing || busy || slot.status !== "available") {
-      event.preventDefault();
-      return;
-    }
-    const drag = {
-      slotId: slot.id,
-      sourceStartAt: slot.startAt,
-      targetStartAt: slot.startAt,
-      copy: event.metaKey || event.ctrlKey,
-    };
-    suppressAvailabilityClick.current = true;
-    slotDragRef.current = drag;
-    setSlotDrag(drag);
-    event.dataTransfer.effectAllowed = "copyMove";
-    event.dataTransfer.setData("text/plain", slot.id);
-  }
-
-  function updateSlotDragTarget(event: React.DragEvent<HTMLDivElement>, day: Date) {
-    const current = slotDragRef.current;
-    if (!current || !isEditing) return;
-    event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
+  function pointerDropTarget(clientX: number, clientY: number) {
+    const scrollArea = calendarScroll.current;
+    if (!scrollArea) return null;
+    const columns = Array.from(
+      scrollArea.querySelectorAll<HTMLElement>(".admin-day-column[data-day-index]"),
+    );
+    const column = columns.find((candidate) => {
+      const bounds = candidate.getBoundingClientRect();
+      return clientX >= bounds.left && clientX <= bounds.right;
+    });
+    if (!column) return null;
+    const dayIndex = Number(column.dataset.dayIndex);
+    const day = days[dayIndex];
+    if (!day) return null;
+    const bounds = column.getBoundingClientRect();
     const row = Math.max(
       0,
-      Math.min(timeRows.length - 2, Math.floor((event.clientY - bounds.top) / ROW_HEIGHT)),
+      Math.min(timeRows.length - 2, Math.floor((clientY - bounds.top) / ROW_HEIGHT)),
     );
-    const targetStartAt = timestampFor(day, timeRows[0] + row * 30);
-    const next = {
-      ...current,
-      targetStartAt,
-      copy: event.metaKey || event.ctrlKey,
+    return timestampFor(day, timeRows[0] + row * 30);
+  }
+
+  function beginSlotDrag(event: React.PointerEvent<HTMLButtonElement>, slot: AdminSlot) {
+    if (
+      event.pointerType !== "mouse" ||
+      event.button !== 0 ||
+      !isEditing ||
+      busy ||
+      slot.status !== "available"
+    ) {
+      return;
+    }
+    const drag: SlotDragState = {
+      slotId: slot.id,
+      sourceStartAt: slot.startAt,
+      targetStartAt: null,
+      copy: event.metaKey || event.ctrlKey || copyModifierRef.current,
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      active: false,
     };
+    slotDragRef.current = drag;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function updateSlotDragTarget(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = slotDragRef.current;
+    if (!current || current.pointerId !== event.pointerId || !isEditing) return;
+    const moved = Math.hypot(
+      event.clientX - current.originX,
+      event.clientY - current.originY,
+    );
+    if (!current.active && moved < 6) return;
+    event.preventDefault();
+    const next: SlotDragState = {
+      ...current,
+      active: true,
+      targetStartAt: pointerDropTarget(event.clientX, event.clientY),
+      // Once copy mode is entered, keep it latched through the drop. Browsers can
+      // stop reporting Meta during a native drag on macOS even while it is held.
+      copy:
+        current.copy ||
+        event.metaKey ||
+        event.ctrlKey ||
+        copyModifierRef.current,
+    };
+    suppressAvailabilityClick.current = true;
     slotDragRef.current = next;
     setSlotDrag(next);
-    event.dataTransfer.dropEffect = next.copy ? "copy" : "move";
   }
 
   async function moveOrCopyAvailability(drag: SlotDragState) {
@@ -472,20 +511,41 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     }
   }
 
-  function dropAvailability(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const dropped = slotDragRef.current;
+  function dropAvailability(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = slotDragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const dropped: SlotDragState = {
+      ...current,
+      targetStartAt:
+        pointerDropTarget(event.clientX, event.clientY) ?? current.targetStartAt,
+      copy:
+        current.copy ||
+        event.metaKey ||
+        event.ctrlKey ||
+        copyModifierRef.current,
+    };
     slotDragRef.current = null;
     setSlotDrag(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     window.setTimeout(() => {
       suppressAvailabilityClick.current = false;
     }, 0);
-    if (dropped) void moveOrCopyAvailability(dropped);
+    if (dropped.active && dropped.targetStartAt !== null) {
+      event.preventDefault();
+      void moveOrCopyAvailability(dropped);
+    }
   }
 
-  function endSlotDrag() {
+  function endSlotDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = slotDragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
     slotDragRef.current = null;
     setSlotDrag(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     window.setTimeout(() => {
       suppressAvailabilityClick.current = false;
     }, 0);
@@ -807,7 +867,32 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
   }
 
   useEffect(() => {
+    const pressModifier = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || event.key === "Control") {
+        copyModifierRef.current = true;
+      }
+    };
+    const releaseModifier = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || event.key === "Control") {
+        copyModifierRef.current = false;
+      }
+    };
+    const resetModifier = () => {
+      copyModifierRef.current = false;
+    };
+    window.addEventListener("keydown", pressModifier);
+    window.addEventListener("keyup", releaseModifier);
+    window.addEventListener("blur", resetModifier);
+    return () => {
+      window.removeEventListener("keydown", pressModifier);
+      window.removeEventListener("keyup", releaseModifier);
+      window.removeEventListener("blur", resetModifier);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleUndoShortcut = (event: KeyboardEvent) => {
+      if (slotDragRef.current) return;
       const target = event.target;
       if (
         target instanceof HTMLInputElement ||
@@ -1051,8 +1136,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                     className={`day-column admin-day-column ${index === activeDay ? "mobile-active" : ""} ${isToday ? "is-today" : ""}`}
                     style={{ height: timeRows.length * ROW_HEIGHT }}
                     key={key}
-                    onDragOver={(event) => updateSlotDragTarget(event, day)}
-                    onDrop={dropAvailability}
+                    data-day-index={index}
                   >
                     <div className="grid-lines" aria-hidden="true" />
                     {isToday && showCurrentTime ? <div className="current-time-line admin-current-time" style={{ top: currentLineTop }} aria-label={`Current time ${formatTime(now)}`}><span>{formatTime(now)}</span></div> : null}
@@ -1099,9 +1183,10 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                         <button
                           className={`admin-slot ${slot.status} ${slot.completedAt ? "completed" : ""} ${slot.id === selectedId ? "selected" : ""} ${isAvailabilitySelected ? "multi-selected" : ""} ${slot.status === "available" && !isEditing ? "is-readonly" : ""} ${urgency ? `pending-urgency-${urgency}` : ""} ${lateChange ? "is-late-change" : ""} ${slotDrag?.slotId === slot.id ? "is-drag-source" : ""}`}
                           key={slot.id}
-                          draggable={isEditing && slot.status === "available" && !busy}
-                          onDragStart={(event) => beginSlotDrag(event, slot)}
-                          onDragEnd={endSlotDrag}
+                          onPointerDown={(event) => beginSlotDrag(event, slot)}
+                          onPointerMove={updateSlotDragTarget}
+                          onPointerUp={dropAvailability}
+                          onPointerCancel={endSlotDrag}
                           onClick={() => {
                             if (suppressAvailabilityClick.current) return;
                             if (slot.status === "available" && isEditing) {
