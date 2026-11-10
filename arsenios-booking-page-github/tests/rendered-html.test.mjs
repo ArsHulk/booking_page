@@ -62,7 +62,10 @@ test("collects private booking email and sends the requested notifications", asy
     readFile(new URL("../app/book/BookingForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/bookings/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/bookings/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/booking-email.ts", import.meta.url), "utf8"),
+    Promise.all([
+      readFile(new URL("../lib/booking-email.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/booking-email-content.ts", import.meta.url), "utf8"),
+    ]).then((parts) => parts.join("\n")),
     readFile(new URL("../ADMIN_NOTIFICATION_SETUP.md", import.meta.url), "utf8"),
     readFile(new URL("../schema.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -84,6 +87,11 @@ test("collects private booking email and sends the requested notifications", asy
   assert.match(emailService, /has been rejected/);
   assert.match(emailService, /\+30 694 263 1232/);
   assert.match(emailService, /api\.brevo\.com\/v3\/smtp\/email/);
+  assert.match(emailService, /drum-lesson\.ics/);
+  assert.match(emailService, /attachment: \[/);
+  assert.match(emailService, /Το μάθημα ντραμς σου επιβεβαιώθηκε/);
+  assert.match(emailService, /Remember to remove this lesson if you've added it to your calendar/);
+  assert.match(emailService, /BEGIN:VCALENDAR/);
   assert.match(emailService, /ADMIN_NOTIFICATION_EMAIL/);
   assert.match(emailService, /New lesson request from/);
   assert.match(emailService, /replyTo: \{ name: message\.studentName, email: message\.studentEmail \}/);

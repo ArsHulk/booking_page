@@ -52,6 +52,7 @@ export async function PATCH(request: Request) {
           studentName: booking.studentName,
           studentEmail: booking.studentEmail,
           startAt: booking.startAt,
+          endAt: booking.endAt,
         });
       } catch (emailError) {
         console.error(emailError);
