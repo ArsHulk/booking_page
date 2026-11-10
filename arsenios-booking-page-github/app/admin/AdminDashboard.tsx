@@ -779,6 +779,33 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
     }
   }
 
+  async function dismissExpired(slot: AdminSlot) {
+    if (busy) return;
+    if (!window.confirm("Dismiss this expired request? It will be removed from Pending, and the student won't be emailed.")) return;
+    setBusy(true);
+    dismissNotice();
+    try {
+      const response = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId: slot.id, action: "dismiss" }),
+      });
+      if (response.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not dismiss the request.");
+      setSelectedId(null);
+      await loadSlots(false);
+      showNotice("Expired request dismissed.");
+    } catch (updateError) {
+      showNotice(updateError instanceof Error ? updateError.message : "Please try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function requestCompletionChange(slotId: string, action: CompletionAction) {
     const response = await fetch("/api/admin/completed", {
       method: "PATCH",
@@ -1093,8 +1120,14 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
                       {requestedLabel(slot.requestedAt, now) ? <small className="requested-ago">{requestedLabel(slot.requestedAt, now)}</small> : null}
                     </button>
                     <div className="overview-actions">
-                      <button className="mini-approve" onClick={() => void updateBooking(slot, "approve")} disabled={busy}>Approve</button>
-                      <button className="mini-reject" onClick={() => void updateBooking(slot, "release")} disabled={busy}>Reject</button>
+                      {urgency === "expired" ? (
+                        <button className="mini-dismiss" onClick={() => void dismissExpired(slot)} disabled={busy}>Dismiss</button>
+                      ) : (
+                        <>
+                          <button className="mini-approve" onClick={() => void updateBooking(slot, "approve")} disabled={busy}>Approve</button>
+                          <button className="mini-reject" onClick={() => void updateBooking(slot, "release")} disabled={busy}>Reject</button>
+                        </>
+                      )}
                     </div>
                   </div>
                   );
@@ -1324,7 +1357,8 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
               {selected.studentEmail ? <a className="student-email" href={`mailto:${selected.studentEmail}`}>{selected.studentEmail}</a> : null}
             </div>
             <div className="inspector-actions">
-              {selected.status === "pending" ? <><button className="primary-button" onClick={() => void updateBooking(selected, "approve")} disabled={busy}>Approve request</button><button className="danger-button" onClick={() => void updateBooking(selected, "release")} disabled={busy}>Reject</button></> : null}
+              {selected.status === "pending" && pendingUrgency(selected.startAt, now) === "expired" ? <button className="secondary-button" onClick={() => void dismissExpired(selected)} disabled={busy}>Dismiss</button> : null}
+              {selected.status === "pending" && pendingUrgency(selected.startAt, now) !== "expired" ? <><button className="primary-button" onClick={() => void updateBooking(selected, "approve")} disabled={busy}>Approve request</button><button className="danger-button" onClick={() => void updateBooking(selected, "release")} disabled={busy}>Reject</button></> : null}
               {selected.status === "confirmed" ? (
                 <>
                   <a className="secondary-button" href={`/api/admin/calendar?slot=${encodeURIComponent(selected.id)}`}>↓ Calendar invite</a>
