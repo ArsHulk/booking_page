@@ -195,6 +195,17 @@ export function formatMonth(monthStart: Date) {
   }).format(monthStart);
 }
 
+// "GMT+2" in winter, "GMT+3" in summer: Athens switches with daylight saving.
+export function teacherGmtLabel(now: number = Date.now()) {
+  const part = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TEACHER_TIME_ZONE,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(new Date(now))
+    .find((piece) => piece.type === "timeZoneName");
+  return part?.value ?? "GMT+2";
+}
+
 export function rowLabel(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
