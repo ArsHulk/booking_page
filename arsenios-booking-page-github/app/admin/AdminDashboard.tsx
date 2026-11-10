@@ -988,7 +988,7 @@ export function AdminDashboard({ teacherName }: { teacherName: string }) {
           <div><span>Pending</span><strong>{pending.length}</strong></div>
           <div><span>Scheduled</span><strong>{scheduled.length}</strong></div>
           <div><span>Completed</span><strong>{completed.length}</strong></div>
-          <div><span>Open slots</span><strong>{slots.filter((slot) => slot.status === "available").length}</strong></div>
+          <div><span>Open slots</span><strong>{available.filter((slot) => slot.startAt > now).length}</strong></div>
           <p>Each new week starts blank.</p>
         </div>
 
