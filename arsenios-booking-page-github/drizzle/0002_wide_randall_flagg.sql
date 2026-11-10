@@ -1,0 +1,1 @@
+ALTER TABLE `booking_slots` ADD `student_email` text;
