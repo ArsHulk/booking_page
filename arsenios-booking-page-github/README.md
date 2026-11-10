@@ -42,7 +42,7 @@ Follow [CLOUDFLARE_SETUP.md](./CLOUDFLARE_SETUP.md) for the complete deployment 
 Requires Node.js 22.13 or newer.
 
 1. Copy `.dev.vars.example` to `.dev.vars` and enter a local password of at least 12 characters.
-2. Keep the placeholder D1 ID in `wrangler.jsonc` for local use.
+2. Leave `wrangler.jsonc` unchanged. It contains the live D1 database ID, which production needs. Local commands (`--local` and `npm run dev`) use a separate database stored on your computer, so they never touch live bookings.
 3. Install and initialize:
 
    ```bash
@@ -58,3 +58,13 @@ Requires Node.js 22.13 or newer.
    ```
 
 Never commit `.dev.vars`, `.env` files, or passwords.
+
+## Database changes
+
+The live database was set up by hand in the Cloudflare D1 console (`schema.sql`, then the one-off `*-migration.sql` files). It does not track the Drizzle migrations in `drizzle/`.
+
+- **Do not run `npm run db:migrate:remote` against the live database.** It would try to apply every step from the beginning, including creating tables that already exist.
+- Cloudflare does not run migrations when it deploys. A successful build never changes the database.
+- To change the live database, first inspect it in the D1 console (`PRAGMA table_info(booking_slots);`), then run only the single statement that is missing.
+- For a brand-new database, either run `schema.sql` once, or apply the `drizzle/` steps 0000–0004 in order. Both produce the same tables and indexes. Columns added later appear at the end of the table, which makes no difference to the app.
+- After changing `db/schema.ts`, run `npm run db:generate` and commit the new `drizzle/` files together with the matching change to `schema.sql`.
